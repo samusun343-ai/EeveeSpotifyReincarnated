@@ -575,8 +575,10 @@ private func storeLateLyricsResult(_ fetched: Lyrics, trackId: String, source: L
     // already settled on, this is a no-op and the stored result still lands
     // on the next natural re-request. A nil reported track ID means the
     // player observer isn't attached (9.1.x), where the lyrics request
-    // itself is the current-track signal — assume this is the track, as
-    // loadCustomLyricsForTrackId does for metadata.
+    // itself is the current-track signal — assume this is the track. (This
+    // default is safe here, unlike metadata adoption in
+    // loadCustomLyricsForTrackId: the worst case is a spurious reloadData,
+    // never wrong lyrics filed under another track's ID.)
     let isCurrentTrack = KaraokePlaybackTracker.shared.playerReportedTrackId().map { $0 == trackId } ?? true
     guard isCurrentTrack else { return }
 
