@@ -1,12 +1,6 @@
 import Foundation
 import Orion
 
-private func probeEnabled(_ name: String) -> Bool {
-    guard let v = getenv(name) else { return false }
-    let s = String(cString: v)
-    return s == "1" || s.lowercased() == "true" || s.lowercased() == "yes"
-}
-
 private let traceNet:   Bool = false
 private let traceNotif: Bool = false
 // TESTING: dumps ad-class methods/ivars on launch.
@@ -45,44 +39,64 @@ class TaskResumeProbeHook: ClassHook<NSObject> {
     }
 }
 
+// Notification-post probe. Deliberately kept as light as possible:
+//
+// - Only the two name-only post variants are hooked. The
+//   postNotificationName:object:userInfo: variant is NOT hooked: it is
+//   the most-called post API in the app, and hooking it forces the
+//   userInfo dictionary to bridge into Swift on every single post,
+//   app-wide. Its only extra payload was the userInfo *key names*,
+//   which were logged but never used for any decision — the
+//   notification name alone carries the auth/product signal this
+//   probe exists to trace.
+// - Fast path first: with traceNotif on, every post is logged and no
+//   matching work happens at all. With it off, the name is lowercased
+//   once and checked against the precomputed lowercase pattern lists;
+//   non-matching posts go straight to orig with no logging.
+//
+// Caveat: this lightening only reduces the per-post cost. The
+// 2026-11-25 playback-start deadlock was not caused by the hook being
+// heavy — it was caused by the hook *existing* in every post path at
+// all (Spotify's playback threads blocked inside the hooked post's
+// observer delivery while the main thread waited on those same
+// queues). An enabled probe therefore still carries structural risk;
+// the real fix is that ProbeNotifGroup is only activated when
+// traceNotif is on, and traceNotif is false in normal builds.
 class NotifPostHook: ClassHook<NSObject> {
     typealias Group = ProbeNotifGroup
     static let targetName = "NSNotificationCenter"
 
+    // The pattern lists are already lowercase literals, so matching is
+    // one lowercasing of the incoming name plus substring checks.
+    private static func isImportant(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        if importantNotifSubstrings.contains(where: { lower.contains($0) }) {
+            return true
+        }
+        // traceSB only widens the filter of an already-active probe;
+        // it never activates the probe by itself (see activateEeveeProbes).
+        if traceSB {
+            return sbNotifSubstrings.contains { lower.contains($0) }
+        }
+        return false
+    }
+
+    private static func trace(_ name: String) {
+        if traceNotif || isImportant(name) {
+            NSLog("[PROBE][NOTIF] %@", name)
+        }
+    }
+
     // Don't touch notification.object — can be a zombie ref. type(of:) on a
     // dealloc'd NSObject dispatches to __NSGenericDeallocHandler and aborts.
     func postNotification(_ notification: Notification) {
-        let name = notification.name.rawValue
-        let lower = name.lowercased()
-        let important = importantNotifSubstrings.contains { lower.contains($0) }
-            || (traceSB && sbNotifSubstrings.contains { lower.contains($0) })
-        if traceNotif || important {
-            NSLog("[PROBE][NOTIF] %@", name)
-        }
+        Self.trace(notification.name.rawValue)
         orig.postNotification(notification)
     }
 
     func postNotificationName(_ aName: NSNotification.Name, object anObject: Any?) {
-        let name = aName.rawValue
-        let lower = name.lowercased()
-        let important = importantNotifSubstrings.contains { lower.contains($0) }
-            || (traceSB && sbNotifSubstrings.contains { lower.contains($0) })
-        if traceNotif || important {
-            NSLog("[PROBE][NOTIF] %@", name)
-        }
+        Self.trace(aName.rawValue)
         orig.postNotificationName(aName, object: anObject)
-    }
-
-    func postNotificationName(_ aName: NSNotification.Name, object anObject: Any?, userInfo aUserInfo: [AnyHashable : Any]?) {
-        let name = aName.rawValue
-        let lower = name.lowercased()
-        let important = importantNotifSubstrings.contains { lower.contains($0) }
-            || (traceSB && sbNotifSubstrings.contains { lower.contains($0) })
-        if traceNotif || important {
-            let uiKeys = aUserInfo?.keys.map { "\($0)" }.joined(separator: ",") ?? ""
-            NSLog("[PROBE][NOTIF] %@ userInfo=[%@]", name, uiKeys)
-        }
-        orig.postNotificationName(aName, object: anObject, userInfo: aUserInfo)
     }
 }
 
@@ -282,6 +296,12 @@ private func dumpClassesOnce() {
         NSLog("[PROBE][SHUF] === shuffle class dump end ===")
     }
 
+    // The full class-list scan below belongs to the general class dump
+    // only. It used to run whenever *any* dump flag was on (asking for
+    // the ad-class dump also paid for a whole-runtime scan); gate it on
+    // runClassDump so each flag pays only for its own dump.
+    guard runClassDump else { return }
+
     // objc_copyClassList returns AutoreleasingUnsafeMutablePointer; subscripting
     // triggers retain/autorelease msgSend which aborts on iOS 26's baked-in
     // __NSGenericDeallocHandler entries. objc_getClassList with a raw buffer
@@ -308,16 +328,23 @@ private func dumpClassesOnce() {
 
 func activateEeveeProbes() {
     let netOn = traceNet
-    // The notification probe hooks every NSNotificationCenter post in the
-    // app. It must only be active when a trace flag that actually consumes
+    // The notification probe hooks NSNotificationCenter posts app-wide.
+    // It must only be active when a trace flag that actually consumes
     // it is on: left always-on, it sits in the post path of every Spotify
     // thread while doing nothing (all trace flags are false), and the
     // 2026-11-25 crash log (0x8BADF00D watchdog) shows Spotify's playback
     // threads blocked inside the hooked post's observer delivery while the
     // main thread waits on those same queues — a cross-thread deadlock at
-    // playback start. With both flags false the group is never activated
-    // and NSNotificationCenter keeps its stock post path.
-    let notifOn = traceNotif || traceSB
+    // playback start.
+    //
+    // traceNotif is the ONLY flag that may activate this probe. traceSB
+    // must never arm it by itself: an earlier version of this gate used
+    // `traceNotif || traceSB`, so a build made just to investigate
+    // SponsorBlock (traceSB) silently re-armed the notification hook —
+    // with its filter widened to player/track notifications, the exact
+    // traffic that deadlocked — and recreated the crash configuration.
+    // traceSB now only widens the filter inside an already-active probe.
+    let notifOn = traceNotif
     NSLog("[PROBE] activating: net=%@ notif=%@ ads=%@ sb=%@",
           netOn ? "on" : "off",
           notifOn ? "on" : "off",
