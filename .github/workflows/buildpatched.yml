@@ -105,39 +105,6 @@ jobs:
           chmod +x Tools/build-zxpi.sh
           Tools/build-zxpi.sh
 
-      # Experimental lyrics widget (.appex). Built from the standalone
-      # XcodeGen project in Widget/ — the Theos build only produces the
-      # tweak .dylib. Failure here must not sink the IPA build: the inject
-      # step below skips itself when the appex is missing.
-      - name: Build Eevee lyrics widget (.appex)
-        if: ${{ inputs.ipa_url != '' }}
-        continue-on-error: true
-        run: |
-          # Xcode 26 splits the iOS device platform into a downloadable
-          # component; the runner image does not preinstall it, and without
-          # it xcodebuild finds no destination for -sdk iphoneos at all
-          # ("iOS 26.1 is not installed"). Download it first (no-op when
-          # already present).
-          xcodebuild -downloadPlatform iOS || true
-          cd Widget
-          xcodegen generate
-          xcodebuild -project EeveeLyricsWidget.xcodeproj \
-            -scheme EeveeLyricsWidget \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/widget-dd" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build
-          WIDGET_APPEX=$(find "$RUNNER_TEMP/widget-dd/Build/Products" -name 'EeveeLyricsWidget.appex' -type d | head -1)
-          [ -n "$WIDGET_APPEX" ] || { echo "::warning::widget appex not produced; IPA will ship without the widget"; exit 0; }
-          # Ad-hoc sign WITH the entitlements: sideloader tooling reads the
-          # requested App Groups from the code signature, and an unsigned
-          # binary carries no entitlements blob at all. The installer
-          # re-signs everything with the user's identity at install time.
-          codesign --force --sign - --entitlements EeveeLyricsWidget.entitlements "$WIDGET_APPEX"
-          echo "WIDGET_APPEX=$WIDGET_APPEX" >> $GITHUB_ENV
-
       - name: Fetch OpeninSafariSpotify extension (.appex)
         if: ${{ inputs.ipa_url != '' }}
         run: |
@@ -175,32 +142,6 @@ jobs:
           cyan -i ${{ github.workspace }}/spotify.ipa -o "$OUT" \
                -f "${INJECT[@]}" -c 9 -m 15.0 -du
           echo "OUT_IPA=$OUT" >> $GITHUB_ENV
-
-      # Must land in the IPA BEFORE the ipapatch step below: ipapatch
-      # LC-injects zxPluginsInject into the main executable and every
-      # .appex present at that point, and the widget depends on
-      # zxPluginsInject's group-container/defaults bridge to receive the
-      # tweak's now-playing payload. (The Safari extension further below
-      # is added after ipapatch and does not get the shim — it doesn't
-      # need it; the widget does.)
-      - name: Inject Eevee lyrics widget into IPA PlugIns
-        if: ${{ inputs.ipa_url != '' }}
-        run: |
-          if [ -z "${WIDGET_APPEX:-}" ] || [ ! -d "$WIDGET_APPEX" ]; then
-            echo "::warning::widget appex was not built; skipping widget injection"
-            exit 0
-          fi
-          cd "$(dirname "$OUT_IPA")"
-          rm -rf Payload
-          unzip -q "$(basename "$OUT_IPA")"
-
-          mkdir -p "Payload/Spotify.app/PlugIns"
-          rm -rf "Payload/Spotify.app/PlugIns/EeveeLyricsWidget.appex"
-          cp -R "$WIDGET_APPEX" "Payload/Spotify.app/PlugIns/EeveeLyricsWidget.appex"
-
-          # Repack only the Payload folder back into the IPA
-          zip -qry "$(basename "$OUT_IPA")" Payload
-          rm -rf Payload
 
       - name: LC-inject zxPluginsInject (ipapatch)
         if: ${{ inputs.ipa_url != '' }}

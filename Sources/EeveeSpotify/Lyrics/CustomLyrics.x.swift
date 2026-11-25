@@ -193,12 +193,6 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
 
     writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced)")
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
-    LyricsWidgetBridge.publish(
-        trackId: searchQuery.spotifyTrackId,
-        title: currentTitle,
-        artist: currentArtist,
-        dto: lyricsDto
-    )
 
     // The user's timing correction applies to the native lyrics view only.
     // The karaoke overlay compensates on the playback-position side (see

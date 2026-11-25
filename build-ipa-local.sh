@@ -54,33 +54,6 @@ color "3/8  zxPluginsInject.dylib"
 chmod +x Tools/build-zxpi.sh
 Tools/build-zxpi.sh >/dev/null
 
-# Optional: Eevee lyrics widget (.appex), from the XcodeGen project in
-# Widget/. Skipped silently when xcodegen is unavailable — the IPA is
-# fully functional without the widget. Mirrors the GitHub workflow.
-WIDGET_APPEX=""
-if command -v xcodegen >/dev/null 2>&1 && [ -f Widget/project.yml ]; then
-    color "widget  Eevee lyrics widget (.appex)"
-    WIDGET_DD="$REPO_DIR/Outputs/widget-dd"
-    rm -rf "$WIDGET_DD"
-    (cd Widget && xcodegen generate)
-    xcodebuild -project Widget/EeveeLyricsWidget.xcodeproj \
-        -scheme EeveeLyricsWidget \
-        -configuration Release \
-        -sdk iphoneos \
-        -destination 'generic/platform=iOS' \
-        -derivedDataPath "$WIDGET_DD" \
-        CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-        build >/dev/null
-    WIDGET_APPEX=$(find "$WIDGET_DD/Build/Products" -name 'EeveeLyricsWidget.appex' -type d 2>/dev/null | head -1)
-    if [ -n "$WIDGET_APPEX" ]; then
-        # Ad-hoc sign WITH the entitlements so sideloader tooling can see
-        # the requested App Groups in the code signature.
-        codesign --force --sign - --entitlements Widget/EeveeLyricsWidget.entitlements "$WIDGET_APPEX"
-    else
-        echo "widget appex not produced; continuing without it"
-    fi
-fi
-
 color "4/8  extract deb"
 DEB_EXTRACT="$REPO_DIR/Outputs/deb-extract"
 rm -rf "$DEB_EXTRACT"; mkdir -p "$DEB_EXTRACT"
@@ -96,21 +69,6 @@ INJECT=("$DYLIB_SRC")
 [ -n "$BUNDLE_SRC" ]    && INJECT+=("$BUNDLE_SRC")
 rm -f "$OUT_IPA"
 cyan -i "$VANILLA_IPA" -o "$OUT_IPA" -f "${INJECT[@]}" -c 9 -m 15.0 -du
-
-# The widget appex must be inside the IPA BEFORE ipapatch runs: ipapatch
-# LC-injects zxPluginsInject into the main exec and every .appex present,
-# and the widget relies on that shim's group-defaults bridge for its data.
-if [ -n "$WIDGET_APPEX" ] && [ -d "$WIDGET_APPEX" ]; then
-    color "widget  inject EeveeLyricsWidget.appex into PlugIns"
-    WIDGET_STAGE="$REPO_DIR/Outputs/widget-stage"
-    rm -rf "$WIDGET_STAGE"; mkdir -p "$WIDGET_STAGE"
-    (cd "$WIDGET_STAGE" && unzip -q "$REPO_DIR/$OUT_IPA" \
-        && mkdir -p "Payload/Spotify.app/PlugIns" \
-        && rm -rf "Payload/Spotify.app/PlugIns/EeveeLyricsWidget.appex" \
-        && cp -R "$WIDGET_APPEX" "Payload/Spotify.app/PlugIns/EeveeLyricsWidget.appex" \
-        && zip -qry "$REPO_DIR/$OUT_IPA" Payload)
-    rm -rf "$WIDGET_STAGE"
-fi
 
 color "6/8  ipapatch LC-inject zxPluginsInject"
 ipapatch --input "$OUT_IPA" --inplace --noconfirm --dylib packages/zxPluginsInject.dylib

@@ -19,10 +19,6 @@ EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell 
 EeveeSpotify_FILES += Sources/EeveeSpotifyC/PixieArtistFollow.x
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
-# WidgetKit is only used by LyricsWidgetBridge (reload request for the
-# optional widget extension that ships in the IPA). System framework,
-# present on every iOS version this tweak targets (14.0+).
-EeveeSpotify_FRAMEWORKS = WidgetKit
 EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
 
 # RootHide's compatibility implementation of libroot resolves jailbreak paths
