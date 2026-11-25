@@ -130,13 +130,15 @@ static id currentProvider(void) {
 %end
 
 // The Follow element asks Curation's provider, which wraps the collection one.
-%hook _TtC21Curation_PlatformImpl30CUPStateProviderImplementation
-- (id)subscribeCollectionStateForURL:(id)url inContext:(id)context completion:(id)completion {
-    Ivar ivar = class_getInstanceVariable(object_getClass(self), "collectionPlatformStateProvider");
-    if (ivar) keepProvider(object_getIvar(self, ivar));
-    return %orig;
-}
-%end
+// There is deliberately no hook on _TtC21Curation_PlatformImpl30CUPStateProviderImplementation:
+// a previous declaration hooked subscribeCollectionStateForURL:inContext:completion:,
+// but that selector exists nowhere in Spotify (checked against the full
+// 9.2.2 class/protocol tables), and the class itself exposes no
+// Objective-C methods at all (zero instance methods, zero protocols in
+// the typed method table), so the hook could never attach. The wrapped
+// collectionPlatformStateProvider is captured through the hooks on
+// CollectionPlatformStateProviderImpl / ACUEsperantoStateProvider and
+// ACUCollectionPlatform's stateProvider above instead.
 
 #pragma mark - one subscription per page
 

@@ -55,11 +55,13 @@ final class KaraokeOverlayPresenter {
         return KaraokeLyricsStore.shared.lyrics(forTrackId: trackId) != nil
     }
 
-    /// Walks from WindowHelper's captured-at-launch root view controller
-    /// (NOT a fresh `UIApplication.shared...windows` lookup) down to
-    /// whatever's actually topmost right now.
+    /// Walks from WindowHelper's root view controller (resolved fresh on
+    /// every access, so a rebuilt scene is picked up) down to whatever's
+    /// actually topmost right now.
     private static func topVC() -> UIViewController? {
-        var top = WindowHelper.shared.rootViewController
+        guard var top = WindowHelper.shared.rootViewController else {
+            return nil
+        }
         while let presented = top.presentedViewController {
             top = presented
         }

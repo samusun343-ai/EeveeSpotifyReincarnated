@@ -4,7 +4,7 @@ class SPTFreeTierArtistHubRemoteURLResolverHook: ClassHook<NSObject> {
     typealias Group = V91PremiumPatchingGroup
     
     static var targetName: String {
-        return EeveeSpotify.hookTarget == .v91 ? "UIView" : "SPTFreeTierArtistHubRemoteURLResolver"
+        return HookTargetNameHelper.freeTierArtistHubResolver
     }
     
     func initWithViewURI(

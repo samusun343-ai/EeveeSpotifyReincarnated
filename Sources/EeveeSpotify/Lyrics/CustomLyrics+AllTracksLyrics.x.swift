@@ -29,9 +29,7 @@ class SPTPlayerTrackAvailabilityHook: ClassHook<NSObject> {
 // SPTPlayerTrack metadata hooks not compatible with 9.1.x
 class SPTPlayerTrackHook: ClassHook<NSObject> {
     typealias Group = LyricsErrorHandlingGroup  // Not activated for 9.1.x
-    static let targetName = EeveeSpotify.hookTarget == .v90
-        ? "SPTPlayerTrackImplementation"
-        : "SPTPlayerTrack"
+    static let targetName = HookTargetNameHelper.playerTrack
 
     func metadata() -> [String: String] {
         var meta = orig.metadata()
@@ -107,9 +105,7 @@ class NPVScrollViewControllerV91Hook: ClassHook<NSObject> {
 
 class NowPlayingScrollViewControllerHook: ClassHook<NSObject> {
     typealias Group = LegacyLyricsGroup
-    static var targetName = EeveeSpotify.hookTarget == .v91
-        ? "UIView" // Dummy target for 9.1.6
-        : "NowPlaying_ScrollImpl.NowPlayingScrollViewController"
+    static var targetName = HookTargetNameHelper.nowPlayingScrollViewController
     
     func nowPlayingScrollViewModelWithDidLoadComponentsFor(
         _ track: SPTPlayerTrack,
