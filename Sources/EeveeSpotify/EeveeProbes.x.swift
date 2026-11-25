@@ -308,7 +308,16 @@ private func dumpClassesOnce() {
 
 func activateEeveeProbes() {
     let netOn = traceNet
-    let notifOn = true
+    // The notification probe hooks every NSNotificationCenter post in the
+    // app. It must only be active when a trace flag that actually consumes
+    // it is on: left always-on, it sits in the post path of every Spotify
+    // thread while doing nothing (all trace flags are false), and the
+    // 2026-11-25 crash log (0x8BADF00D watchdog) shows Spotify's playback
+    // threads blocked inside the hooked post's observer delivery while the
+    // main thread waits on those same queues — a cross-thread deadlock at
+    // playback start. With both flags false the group is never activated
+    // and NSNotificationCenter keeps its stock post path.
+    let notifOn = traceNotif || traceSB
     NSLog("[PROBE] activating: net=%@ notif=%@ ads=%@ sb=%@",
           netOn ? "on" : "off",
           notifOn ? "on" : "off",
