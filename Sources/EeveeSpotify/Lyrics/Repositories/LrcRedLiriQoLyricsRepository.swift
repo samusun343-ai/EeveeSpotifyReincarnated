@@ -1,23 +1,32 @@
 import Foundation
 
-/// Two-stage lyrics source combining lrc.red and LiriQo.
+/// Three-stage lyrics source combining lrc.red, LRCLIB and LiriQo.
 ///
 /// Stage 1 is lrc.red: a large, CDN-cached catalogue keyed by ISRC with
 /// line- and word-synced lyrics, fast enough to hit on every track change.
-/// Stage 2 is LiriQo, an aggregator over 11 providers (Apple Music,
-/// Musixmatch, NetEase, PetitLyrics, LRCLIB, ...) that often has a song
-/// when lrc.red does not — but it is slow (several seconds) and tightly
-/// rate-limited, so it is only queried, once and without retries, when
-/// stage 1 found nothing, and once more as an upgrade attempt when
-/// stage 1 only had untimed (plain) lyrics: a synced LiriQo result then
-/// replaces the plain text, while any LiriQo failure keeps it. LiriQo
-/// outcomes are cached in memory for the session (LRU, 100 entries) so
-/// repeat plays never re-ask — but only definitive outcomes are cached:
-/// a 429, a server error or a network failure is never recorded as a
-/// miss, so a rate-limited track is asked about again on the next play
-/// instead of staying lyric-less for the whole session. If both stages
-/// fail, the error propagates and the existing Genius fallback in
-/// CustomLyrics takes over as the final fallback.
+/// Stage 2 is LRCLIB: also fast (about a second), with a large community
+/// catalogue that often has synced lyrics where lrc.red has only plain
+/// text or nothing at all — it upgrades Koruru's "Our Memories" from
+/// plain to line-synced and has Elijah N's "Stick Together", which
+/// lrc.red does not carry. Stage 3 is LiriQo, an aggregator over 11
+/// providers (Apple Music, Musixmatch, NetEase, PetitLyrics, LRCLIB,
+/// ...) that often has a song when both earlier stages do not — but it
+/// is slow (several seconds) and tightly rate-limited, so it is only
+/// queried, once and without retries, after both earlier stages.
+///
+/// The traversal is coverage-first: a synced result from any stage
+/// ends the chain at once, and later stages are only asked while every
+/// earlier stage missed or produced untimed (plain) text. Plain
+/// results are kept as a floor and compete with each other — the one
+/// with the most lines wins, ties keep the earlier stage's — so a
+/// failure in a later stage never loses lyrics an earlier stage had.
+/// LiriQo outcomes are cached in memory for the session (LRU, 100
+/// entries) so repeat plays never re-ask — but only definitive
+/// outcomes are cached: a 429, a server error or a network failure is
+/// never recorded as a miss, so a rate-limited track is asked about
+/// again on the next play instead of staying lyric-less for the whole
+/// session. If all stages fail, the error propagates and the existing
+/// Genius fallback in CustomLyrics takes over as the final fallback.
 ///
 /// Where an upstream supplies a translation that can be aligned to the
 /// lyric lines with certainty — TTML translations keyed by line, or a
@@ -152,8 +161,13 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     // MARK: - LyricsRepository
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
-        var lrcRedPlainLyrics: LyricsDto?
+        // The best untimed (plain) result so far. A synced result from
+        // any stage returns at once; plain text only ever competes with
+        // plain text from later stages (see betterPlainFloor), and a
+        // stage that fails or finds nothing leaves the floor untouched.
+        var plainFloor: LyricsDto?
 
+        // Stage 1: lrc.red
         do {
             let dto = try getLrcRedLyrics(query)
 
@@ -162,28 +176,68 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             }
 
             if !dto.lines.isEmpty {
-                // lrc.red has the song, but only as untimed (plain) text.
-                // Keep it as a floor and let stage 2 try to upgrade it to
-                // a synced version below: plain text beats no lyrics, but
-                // a synced LiriQo result beats plain text.
-                lrcRedPlainLyrics = dto
-                writeDebugLog("[lrc.red+LiriQo] lrc.red returned plain-only lyrics for \(query.title)/\(query.primaryArtist), trying LiriQo for a synced version")
+                plainFloor = dto
+                writeDebugLog("[lrc.red+LRCLIB+LiriQo] lrc.red returned plain-only lyrics for \(query.title)/\(query.primaryArtist), trying LRCLIB")
             } else {
-                writeDebugLog("[lrc.red+LiriQo] lrc.red returned no lines for \(query.title)/\(query.primaryArtist), trying LiriQo")
+                writeDebugLog("[lrc.red+LRCLIB+LiriQo] lrc.red returned no lines for \(query.title)/\(query.primaryArtist), trying LRCLIB")
             }
         } catch {
-            writeDebugLog("[lrc.red+LiriQo] lrc.red failed for \(query.title)/\(query.primaryArtist): \(error), trying LiriQo")
+            writeDebugLog("[lrc.red+LRCLIB+LiriQo] lrc.red failed for \(query.title)/\(query.primaryArtist): \(error), trying LRCLIB")
         }
 
-        if let lrcRedPlainLyrics {
-            if let upgraded = try? getLiriQoLyrics(query, options: options), upgraded.timeSynced, !upgraded.lines.isEmpty {
-                return upgraded
+        // Stage 2: LRCLIB
+        do {
+            let dto = try getLrclibStageLyrics(query)
+
+            if dto.timeSynced, !dto.lines.isEmpty {
+                return dto
             }
 
-            return lrcRedPlainLyrics
+            if !dto.lines.isEmpty {
+                plainFloor = plainFloor.map { betterPlainFloor($0, dto) } ?? dto
+                writeDebugLog("[lrc.red+LRCLIB+LiriQo] LRCLIB returned plain-only lyrics for \(query.title)/\(query.primaryArtist), trying LiriQo")
+            } else {
+                writeDebugLog("[lrc.red+LRCLIB+LiriQo] LRCLIB returned no lines for \(query.title)/\(query.primaryArtist), trying LiriQo")
+            }
+        } catch {
+            writeDebugLog("[lrc.red+LRCLIB+LiriQo] LRCLIB failed for \(query.title)/\(query.primaryArtist): \(error), trying LiriQo")
         }
 
-        return try getLiriQoLyrics(query, options: options)
+        // Stage 3: LiriQo
+        do {
+            let dto = try getLiriQoLyrics(query, options: options)
+
+            if dto.timeSynced, !dto.lines.isEmpty {
+                return dto
+            }
+
+            if !dto.lines.isEmpty {
+                return plainFloor.map { betterPlainFloor($0, dto) } ?? dto
+            }
+
+            // LiriQo answered but had nothing usable (e.g. an
+            // instrumental record): an earlier stage's plain text, if
+            // any, is still the best available answer.
+            if let plainFloor {
+                return plainFloor
+            }
+
+            return dto
+        } catch {
+            if let plainFloor {
+                return plainFloor
+            }
+
+            throw error
+        }
+    }
+
+    /// Plain (untimed) results compete on completeness only: the one
+    /// with more lines wins, and a tie keeps the current floor — stage
+    /// order is the priority order, so a later stage must be strictly
+    /// fuller to displace an earlier stage's text.
+    private func betterPlainFloor(_ current: LyricsDto, _ candidate: LyricsDto) -> LyricsDto {
+        candidate.lines.count > current.lines.count ? candidate : current
     }
 
     // MARK: - Stage 1: lrc.red
@@ -440,12 +494,84 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             )
         }
 
-        return LyricsDto(
+        var dto = LyricsDto(
             lines: lines,
             timeSynced: true,
             romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
             providerCredit: "lrc.red"
         )
+
+        // The synced DTO is built from the .lrc file, but the track's
+        // TTML can carry a translation keyed by line — the same
+        // document the plain path reads. Attach it under the strict
+        // gate in lrcRedSyncedTranslation; any doubt leaves the DTO
+        // untranslated rather than risking a shifted translation.
+        if dto.translation == nil {
+            dto.translation = lrcRedSyncedTranslation(
+                isrc: isrc,
+                track: track,
+                lineTexts: timedLines.map(\.text)
+            )
+        }
+
+        return dto
+    }
+
+    /// Fetches the track's TTML once more on the synced path and
+    /// extracts its embedded translation, but only when alignment
+    /// with the DTO built from the .lrc file is exact: the TTML's
+    /// line texts must equal the DTO's line texts in count and in
+    /// every position. The translation itself is then keyed by line
+    /// through the parser, which additionally requires every key to
+    /// resolve. Any failure — fetch, parse, count or text mismatch,
+    /// missing keys — returns nil; a missing or shifted translation
+    /// must never fail or corrupt a synced result that already works.
+    private func lrcRedSyncedTranslation(
+        isrc: String,
+        track: LrcRedTrackResponse,
+        lineTexts: [String]
+    ) -> LyricsTranslationDto? {
+        let ttmlUrl = track.files?.ttml ?? "\(Self.lrcRedBaseUrl)/s/\(isrc).ttml"
+
+        let data: Data
+
+        do {
+            let (fetchedData, statusCode) = try perform(ttmlUrl, session: lrcRedSession, logTag: "lrc.red")
+
+            guard statusCode == 200 else {
+                logHttpFailure(logTag: "lrc.red", statusCode: statusCode, context: "TTML (synced translation) for \(isrc)")
+                return nil
+            }
+
+            data = fetchedData
+        } catch {
+            writeDebugLog("[lrc.red] TTML fetch for synced translation of \(isrc) failed: \(error)")
+            return nil
+        }
+
+        let parserDelegate = LrcRedTTMLParser()
+        let xmlParser = XMLParser(data: data)
+        xmlParser.delegate = parserDelegate
+
+        guard xmlParser.parse() else {
+            return nil
+        }
+
+        let entries = parserDelegate.lineEntries
+
+        guard entries.count == lineTexts.count else {
+            writeDebugLog("[lrc.red] Synced translation for \(isrc) rejected: TTML has \(entries.count) lines, DTO has \(lineTexts.count)")
+            return nil
+        }
+
+        for (entry, lineText) in zip(entries, lineTexts) {
+            guard entry.text == lineText else {
+                writeDebugLog("[lrc.red] Synced translation for \(isrc) rejected: TTML line text differs from the synced lyrics")
+                return nil
+            }
+        }
+
+        return parserDelegate.translation(matchingLineKeys: entries.map(\.key))
     }
 
     /// Splits one enhanced-LRC line body into its plain text and its
@@ -535,9 +661,381 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return dto
     }
 
-    // MARK: - Stage 2: LiriQo
+    // MARK: - Stage 2: LRCLIB
 
-    /// Cache-fronted stage 2 entry point. A cached hit replays its DTOs
+    /// Stage 2 fetches through the standalone LRCLIB source's machinery
+    /// (`LrclibLyricsRepository.getRecord`), so this stage inherits its
+    /// custom-URL setting, IPv4-direct connection and TLS handling, and
+    /// asks exactly the same two title forms it asks. The DTO is built
+    /// here rather than by the standalone source because the record
+    /// carries word timings (the Lyricsfile) that its flattened DTO
+    /// drops — this stage publishes them to the karaoke store itself,
+    /// the way stage 1 does, and credits LRCLIB on the DTO.
+    private func getLrclibStageLyrics(_ query: LyricsSearchQuery) throws -> LyricsDto {
+        let song = try LrclibLyricsRepository.shared.getRecord(query)
+
+        if song.instrumental {
+            return LyricsDto(
+                lines: [],
+                timeSynced: false,
+                romanization: .original,
+                providerCredit: "LRCLIB"
+            )
+        }
+
+        if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
+            var timedLines: [(startMs: Int, text: String)] = []
+
+            for rawLine in syncedLyrics.components(separatedBy: "\n") {
+                let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+                guard let match = line.firstMatch(
+                    "\\[(?<minute>\\d+):(?<seconds>\\d+\\.\\d+|\\d+)\\] ?(?<content>.*)"
+                ) else {
+                    continue
+                }
+
+                var captures: [String: String] = [:]
+
+                for name in ["minute", "seconds", "content"] {
+                    let matchRange = match.range(withName: name)
+
+                    if let substringRange = Range(matchRange, in: line) {
+                        captures[name] = String(line[substringRange])
+                    }
+                }
+
+                guard let minute = captures["minute"].flatMap(Int.init),
+                      let seconds = captures["seconds"].flatMap(Float.init),
+                      let content = captures["content"] else {
+                    continue
+                }
+
+                timedLines.append((
+                    startMs: minute * 60 * 1000 + Int(seconds * 1000),
+                    text: content.trimmingCharacters(in: .whitespaces)
+                ))
+            }
+
+            if !timedLines.isEmpty {
+                let lines = timedLines.map {
+                    LyricsLineDto(content: $0.text.lyricsNoteIfEmpty, offsetMs: $0.startMs)
+                }
+
+                // Word timings, when the record carries them, are
+                // published to the karaoke store directly — the shared
+                // line-synced fill in CustomLyrics then skips this
+                // track, exactly as with stage 1's word tracks.
+                if song.hasWordSync == true,
+                   let lyricsfile = song.lyricsfile,
+                   let karaoke = lrclibKaraoke(fromLyricsfile: lyricsfile, timedLines: timedLines) {
+                    KaraokeLyricsStore.shared.set(
+                        trackId: query.spotifyTrackId,
+                        lyrics: karaoke
+                    )
+                }
+
+                return LyricsDto(
+                    lines: lines,
+                    timeSynced: true,
+                    romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
+                    providerCredit: "LRCLIB"
+                )
+            }
+        }
+
+        guard let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty else {
+            throw LyricsError.noSuchSong
+        }
+
+        var texts = plainLyrics.components(separatedBy: "\n")
+
+        if texts.last?.isEmpty == true {
+            texts.removeLast()
+        }
+
+        return LyricsDto(
+            lines: texts.map { LyricsLineDto(content: $0) },
+            timeSynced: false,
+            romanization: texts.canBeRomanized ? .canBeRomanized : .original,
+            providerCredit: "LRCLIB"
+        )
+    }
+
+    /// Line text reduced to its comparison form for Lyricsfile
+    /// alignment: trimmed, lowercased, whitespace runs collapsed.
+    private func normalizedLineText(_ text: String) -> String {
+        text
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    /// Builds word karaoke from a record's Lyricsfile, aligned to the
+    /// synced-LRC lines the DTO carries. The two are separate records
+    /// LRCLIB merged into one entry, and measured samples show they
+    /// routinely diverge: extra or missing lines on either side
+    /// (intros, chorus repeats) and occasional wording variants
+    /// ("You're so fuckin' special" vs "So fucking special"). A strict
+    /// index-by-index match fired on only 1 of 5 measured word-synced
+    /// records, so lines are instead paired sequentially — in order,
+    /// by normalized text, skipping lines only one side has — and the
+    /// pairing is adopted only when at least half of the LRC lines
+    /// found a partner. A pair requires exact normalized-text
+    /// equality, so a paired line's words always belong to that line's
+    /// text; unpaired LRC lines are pseudo-filled line-style, the way
+    /// the other stages fill wordless lines.
+    ///
+    /// The file's timings also disagree with the LRC's by a fraction
+    /// of a second (Creep, line 1: file 19,980ms vs LRC 19,160ms), so
+    /// each line's words are re-anchored to the LRC line's start —
+    /// the DTO lines are what the native view seeks by, and the
+    /// karaoke must agree with them. A word ends where the next word
+    /// starts; the last word of a line ends at the line's end, the
+    /// same convention stage 1 uses.
+    private func lrclibKaraoke(
+        fromLyricsfile yaml: String,
+        timedLines: [(startMs: Int, text: String)]
+    ) -> KaraokeLyricsDto? {
+        let fileLines = parseLyricsfile(yaml)
+
+        guard !fileLines.isEmpty, fileLines.contains(where: { !$0.words.isEmpty }) else {
+            return nil
+        }
+
+        // Sequential pairing: timedLine index -> fileLine index.
+        var pairs: [Int: Int] = [:]
+        var timedIndex = 0
+        var fileIndex = 0
+
+        while timedIndex < timedLines.count, fileIndex < fileLines.count {
+            let timedText = normalizedLineText(timedLines[timedIndex].text)
+            let fileText = normalizedLineText(fileLines[fileIndex].text)
+
+            if timedText == fileText {
+                pairs[timedIndex] = fileIndex
+                timedIndex += 1
+                fileIndex += 1
+            } else if timedIndex + 1 < timedLines.count,
+                      normalizedLineText(timedLines[timedIndex + 1].text) == fileText {
+                // A line only the LRC has (an extra intro, a repeat).
+                timedIndex += 1
+            } else if fileIndex + 1 < fileLines.count,
+                      timedText == normalizedLineText(fileLines[fileIndex + 1].text) {
+                // A line only the file has.
+                fileIndex += 1
+            } else {
+                // A wording variant on both sides: leave both
+                // unpaired and move on.
+                timedIndex += 1
+                fileIndex += 1
+            }
+        }
+
+        guard pairs.count * 2 >= timedLines.count else {
+            return nil
+        }
+
+        var karaokeLines: [KaraokeLineDto] = []
+
+        for (index, timedLine) in timedLines.enumerated() {
+            let lineStartMs = timedLine.startMs
+            let lineEndMs = index + 1 < timedLines.count
+                ? timedLines[index + 1].startMs
+                : lineStartMs + 4000
+
+            if let pairedIndex = pairs[index], !fileLines[pairedIndex].words.isEmpty, !timedLine.text.isEmpty {
+                let fileLine = fileLines[pairedIndex]
+                let anchorMs = fileLine.words[0].startMs
+                let shiftMs = lineStartMs - anchorMs
+
+                var syllables: [KaraokeSyllableDto] = []
+
+                for (wordIndex, word) in fileLine.words.enumerated() {
+                    let text = word.text.trimmingCharacters(in: .whitespaces)
+
+                    guard !text.isEmpty else { continue }
+
+                    let wordStartMs = word.startMs + shiftMs
+                    let wordEndMs = wordIndex + 1 < fileLine.words.count
+                        ? fileLine.words[wordIndex + 1].startMs + shiftMs
+                        : lineEndMs
+
+                    syllables.append(KaraokeSyllableDto(
+                        text: text,
+                        startMs: wordStartMs,
+                        endMs: max(wordEndMs, wordStartMs),
+                        isPartOfWord: false
+                    ))
+                }
+
+                if !syllables.isEmpty {
+                    karaokeLines.append(KaraokeLineDto(
+                        syllables: syllables,
+                        startMs: lineStartMs,
+                        endMs: lineEndMs
+                    ))
+                }
+            } else if !timedLine.text.isEmpty {
+                // Wordless line inside a word-synced track: fill it the
+                // way the other stages fill theirs, so publishing word
+                // karaoke leaves no hole in the custom lyrics view.
+                let pseudoSyllables = timedLine.text
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .map {
+                        KaraokeSyllableDto(
+                            text: String($0),
+                            startMs: lineStartMs,
+                            endMs: lineStartMs,
+                            isPartOfWord: false
+                        )
+                    }
+
+                if !pseudoSyllables.isEmpty {
+                    karaokeLines.append(KaraokeLineDto(
+                        syllables: pseudoSyllables,
+                        startMs: lineStartMs,
+                        endMs: lineEndMs
+                    ))
+                }
+            }
+        }
+
+        guard !karaokeLines.isEmpty else {
+            return nil
+        }
+
+        return KaraokeLyricsDto(
+            lines: karaokeLines,
+            songWriters: [],
+            providerCode: nil,
+            providerName: "LRCLIB"
+        )
+    }
+
+    /// One line of a Lyricsfile, with its word start times.
+    private struct LyricsfileLine {
+        var text: String
+        var startMs: Int
+        var words: [(text: String, startMs: Int)] = []
+    }
+
+    /// A tolerant line-based parser for the Lyricsfile subset LRCLIB
+    /// emits — a full YAML parser would be out of place here. Shape:
+    /// a top-level `lines:` list whose entries start at column 0 with
+    /// `- text:`, followed by indented `start_ms:`/`end_ms:` and a
+    /// `words:` list of indented `- text:` entries, each with its own
+    /// indented `start_ms:`. Words carry no end time. Scalars may be
+    /// plain, single-quoted (with '' escaping an apostrophe), or
+    /// double-quoted (backslash escapes).
+    private func parseLyricsfile(_ yaml: String) -> [LyricsfileLine] {
+        var lines: [LyricsfileLine] = []
+        var inLinesList = false
+        var inWords = false
+
+        for rawLine in yaml.components(separatedBy: "\n") {
+            if !inLinesList {
+                if rawLine.trimmingCharacters(in: .whitespaces) == "lines:" {
+                    inLinesList = true
+                }
+                continue
+            }
+
+            if rawLine.hasPrefix("- ") || rawLine.hasPrefix("-") && rawLine.count == 1 {
+                // A column-0 dash starts a new lyric line entry.
+                let body = rawLine.hasPrefix("- ") ? String(rawLine.dropFirst(2)) : ""
+
+                guard body.hasPrefix("text:") else { continue }
+
+                lines.append(LyricsfileLine(
+                    text: yamlScalar(String(body.dropFirst("text:".count))),
+                    startMs: 0
+                ))
+                inWords = false
+                continue
+            }
+
+            let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+
+            if trimmed.hasPrefix("- ") {
+                // An indented dash is a word entry of the current line.
+                let body = String(trimmed.dropFirst(2))
+
+                guard body.hasPrefix("text:"), !lines.isEmpty else { continue }
+
+                lines[lines.count - 1].words.append((
+                    text: yamlScalar(String(body.dropFirst("text:".count))),
+                    startMs: 0
+                ))
+                continue
+            }
+
+            if trimmed == "words:" {
+                inWords = true
+                continue
+            }
+
+            if trimmed.hasPrefix("start_ms:"), !lines.isEmpty {
+                let value = Int(trimmed.dropFirst("start_ms:".count)
+                    .trimmingCharacters(in: .whitespaces)) ?? 0
+
+                if inWords, !lines[lines.count - 1].words.isEmpty {
+                    lines[lines.count - 1].words[lines[lines.count - 1].words.count - 1].startMs = value
+                } else {
+                    lines[lines.count - 1].startMs = value
+                }
+            }
+        }
+
+        return lines
+    }
+
+    /// Reads one YAML scalar: single-quoted (with '' for an embedded
+    /// apostrophe), double-quoted (backslash escapes, including the
+    /// \' form LRCLIB's generator emits), or plain. Whitespace
+    /// outside the quotes is trimmed; whitespace inside them (a
+    /// word's trailing space) is preserved.
+    private func yamlScalar(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespaces)
+
+        if value.hasPrefix("'"), value.hasSuffix("'"), value.count >= 2 {
+            return String(value.dropFirst().dropLast())
+                .replacingOccurrences(of: "''", with: "'")
+        }
+
+        if value.hasPrefix("\""), value.hasSuffix("\""), value.count >= 2 {
+            var result = ""
+            var iterator = value.dropFirst().dropLast().makeIterator()
+            var escaped = false
+
+            while let character = iterator.next() {
+                if escaped {
+                    switch character {
+                    case "n": result.append("\n")
+                    case "t": result.append("\t")
+                    default: result.append(character)
+                    }
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else {
+                    result.append(character)
+                }
+            }
+
+            if escaped {
+                result.append("\\")
+            }
+
+            return result
+        }
+
+        return value
+    }
+
+    // MARK: - Stage 3: LiriQo
+
+    /// Cache-fronted stage 3 entry point. A cached hit replays its DTOs
     /// (including the karaoke store handoff) without any network request;
     /// a cached miss rethrows `noSuchSong` so callers keep their existing
     /// fallback behaviour. Successes and definitive "no lyrics" outcomes

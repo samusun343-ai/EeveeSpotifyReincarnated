@@ -263,19 +263,26 @@ class LrclibLyricsRepository: LyricsRepository {
         }
     }
 
-    func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
-        let song: LrclibSong
-
+    /// Fetches the raw LRCLIB record for a query, trying the title
+    /// as-is first and the stripped title second — the same two
+    /// attempts getLyrics makes. Exposed for the combined
+    /// lrc.red/LRCLIB/LiriQo source, whose LRCLIB stage needs record
+    /// fields (the word timings in the Lyricsfile) that the flattened
+    /// LyricsDto drops.
+    func getRecord(_ query: LyricsSearchQuery) throws -> LrclibSong {
         do {
-            song = try getSong(trackName: query.title, artistName: query.primaryArtist)
+            return try getSong(trackName: query.title, artistName: query.primaryArtist)
         } catch {
-            let strippedTitle = query.title.strippedTrackTitle
             do {
-                song = try getSong(trackName: strippedTitle, artistName: query.primaryArtist)
+                return try getSong(trackName: query.title.strippedTrackTitle, artistName: query.primaryArtist)
             } catch {
                 throw LyricsError.noSuchSong
             }
         }
+    }
+
+    func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
+        let song = try getRecord(query)
 
         if song.instrumental {
             return LyricsDto(

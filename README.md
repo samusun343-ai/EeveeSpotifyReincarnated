@@ -15,7 +15,7 @@ This tweak makes Spotify think you have a Premium subscription, granting free li
 **Spotify 9.1.56 and above** - Full custom lyrics functionality is available with the following providers:
 - **SpicyLyrics**
 - **LRCLIB**
-- **lrc.red + LiriQo**
+- **lrc.red + LRCLIB + LiriQo**
 - **Genius**
 - **PetitLyrics**
 
@@ -72,7 +72,7 @@ EeveeSpotify replaces Spotify monthly limited lyrics with one of the following f
 
 - LRCLIB: The most open service, offering time-synced lyrics. However, it lacks lyrics for many songs.
 
-- lrc.red + LiriQo: A two-stage source. lrc.red is asked first — it is fast and CDN-cached, with line- and word-synced lyrics for a very large catalogue. If lrc.red has nothing for a song, LiriQo is asked next, aggregating 11 providers (including Apple Music, Musixmatch, NetEase, and LRCLIB) with word-synced lyrics when available. Genius remains the final fallback if both stages fail and Genius Fallback is enabled.
+- lrc.red + LRCLIB + LiriQo: A three-stage source. lrc.red is asked first — it is fast and CDN-cached, with line- and word-synced lyrics for a very large catalogue. If lrc.red has only plain text or nothing for a song, LRCLIB is asked next — it is fast too and often has synced lyrics where lrc.red does not. LiriQo is the final stage, aggregating 11 providers (including Apple Music, Musixmatch, NetEase, and LRCLIB) with word-synced lyrics when available. Genius remains the final fallback if all stages fail and Genius Fallback is enabled.
 
 - PetitLyrics: Offers plenty of time-synced Japanese and some international lyrics.
 
