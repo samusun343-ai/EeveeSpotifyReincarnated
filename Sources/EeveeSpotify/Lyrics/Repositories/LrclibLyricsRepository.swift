@@ -137,6 +137,31 @@ class LrclibLyricsRepository: LyricsRepository {
     static let shared = LrclibLyricsRepository(
         apiUrl: UserDefaults.lyricsOptions.lrclibUrl
     )
+
+    // Hosts whose IPv4-direct attempt has already failed in this process.
+    // Some environments fail that attempt every single time — observed on
+    // a real device where the direct connection to lrclib.net's Cloudflare
+    // address dies in the TLS handshake (NSURLError -1200 / errSSL -9824)
+    // and only the hostname retry succeeds. Remembering the failure means
+    // later requests skip the doomed attempt and go straight to the
+    // hostname URL the fallback would have used anyway: the request that
+    // ultimately runs is identical, only the wasted round trip (and its
+    // timeout risk inside the lyrics chain's budget) is gone. Memory-only
+    // and per-host, so a network change is picked up on the next launch.
+    private static var ipv4DirectFailedHosts: Set<String> = []
+    private static let ipv4DirectFailedHostsLock = NSLock()
+
+    private static func ipv4DirectFailed(forHost host: String) -> Bool {
+        ipv4DirectFailedHostsLock.lock()
+        defer { ipv4DirectFailedHostsLock.unlock() }
+        return ipv4DirectFailedHosts.contains(host)
+    }
+
+    private static func markIPv4DirectFailed(host: String) {
+        ipv4DirectFailedHostsLock.lock()
+        ipv4DirectFailedHosts.insert(host)
+        ipv4DirectFailedHostsLock.unlock()
+    }
     
     private func perform(
         _ path: String, 
@@ -159,7 +184,9 @@ class LrclibLyricsRepository: LyricsRepository {
         // ETIMEDOUT at the TCP layer for custom URLSession instances. Resolve to
         // an IPv4 address explicitly and connect to it directly (TLS hostname
         // validation against the original host is handled by LrclibTLSDelegate).
-        if let host = url.host, let ip = resolveIPv4(host) {
+        // Hosts where this direct attempt already failed once in this process
+        // are skipped — see ipv4DirectFailedHosts above.
+        if let host = url.host, !Self.ipv4DirectFailed(forHost: host), let ip = resolveIPv4(host) {
             var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
             components?.host = ip
             if let ipUrl = components?.url {
@@ -194,6 +221,11 @@ class LrclibLyricsRepository: LyricsRepository {
 
         if error != nil, request.url != url {
             // IPv4-direct attempt failed; retry with the original hostname URL.
+            // Remember the failure so later requests for this host skip the
+            // direct attempt entirely (see ipv4DirectFailedHosts above).
+            if let host = url.host {
+                Self.markIPv4DirectFailed(host: host)
+            }
             writeDebugLog("[LRCLIB] IPv4-direct attempt failed (\(error!)), retrying via hostname")
 
             let fallbackSemaphore = DispatchSemaphore(value: 0)
