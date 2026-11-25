@@ -48,8 +48,15 @@ final class KaraokePlaybackTracker {
     /// that field rather than crashing — see the one-time dump below for
     /// getting the REAL key names for a proper follow-up fix.
     func processStateChange(state: AnyObject) {
-        if !didDumpStateShape {
+        // All stored state is confined to `queue` (see the accessors below);
+        // this callback arrives on arbitrary player-observer threads, so the
+        // one-time flag and the fallback reads must go through the queue too.
+        let shouldDumpStateShape = queue.sync { () -> Bool in
+            if didDumpStateShape { return false }
             didDumpStateShape = true
+            return true
+        }
+        if shouldDumpStateShape {
             karaokeDumpClassMethods("playerState", of: state)
         }
 
@@ -82,9 +89,10 @@ final class KaraokePlaybackTracker {
             ? String(uriString.dropFirst("spotify:track:".count))
             : nil
 
-        let positionRaw: Double = (safeValue("position") as? NSNumber)?.doubleValue ?? lastPosition
-        let playbackSpeed: Double = (safeValue("playbackSpeed") as? NSNumber)?.doubleValue ?? lastPlaybackSpeed
-        let isPlaying: Bool = (safeValue("isPlaying") as? Bool) ?? lastIsPlaying
+        let snapshot = queue.sync { (lastPosition, lastPlaybackSpeed, lastIsPlaying) }
+        let positionRaw: Double = (safeValue("position") as? NSNumber)?.doubleValue ?? snapshot.0
+        let playbackSpeed: Double = (safeValue("playbackSpeed") as? NSNumber)?.doubleValue ?? snapshot.1
+        let isPlaying: Bool = (safeValue("isPlaying") as? Bool) ?? snapshot.2
 
         // A state whose item is not a music track (podcast episode, ad, local file)
         // means the previous track's lyrics no longer apply.

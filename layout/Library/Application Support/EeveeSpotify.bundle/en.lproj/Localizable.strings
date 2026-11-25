@@ -214,6 +214,7 @@ action_auto = "Auto";
 draftsTitle = "Reporting & drafts";
 errorNoPodcats = "No podcast is currently playing.";
 markSegment = "Mark segment for current episode";
+markSegmentStartSet = "Start set at %@s · open again to set end";
 advancedTitle = "Advanced";
 howToUseTitle = "How to use";
 creditsTitle = "Credits";

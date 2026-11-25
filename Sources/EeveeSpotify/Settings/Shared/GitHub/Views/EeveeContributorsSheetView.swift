@@ -35,12 +35,12 @@ struct ContributorRow: View {
             // Single contributor: pfp on left, name + roles on right
             HStack(alignment: .center, spacing: 14) {
                 // Bigger pfp for single contributor
-                ImageView(urlString: "https://github.com/\(contributor.usernames[0]).png")
+                ImageView(urlString: "https://github.com/\(contributor.usernames.first ?? "").png")
                     .frame(width: 52, height: 52)
                     .clipShape(Circle())
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(contributor.displayName ?? contributor.usernames[0])
+                    Text(contributor.displayName ?? contributor.usernames.first ?? "")
                         .font(.title3).bold()
                         .foregroundColor(.white)
 

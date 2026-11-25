@@ -71,7 +71,7 @@ struct SponsorBlockSettingsView: View {
                     } else {
                         let p = SponsorBlockPendingSegment(episodeID: episodeID, start: snap.position)
                         SponsorBlockPendingStore.upsert(p)
-                        SponsorBlockToast.shared.show("Start set at \(String(format: "%.1f", snap.position))s · open again to set end")
+                        SponsorBlockToast.shared.show("markSegmentStartSet".localizeWithFormat(String(format: "%.1f", snap.position)))
                     }
                 } label: {
                     HStack {

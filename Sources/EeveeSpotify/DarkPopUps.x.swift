@@ -27,10 +27,12 @@ class EncoreLabelHook: ClassHook<UIView> {
         if let viewController = WindowHelper.shared.viewController(for: target),
             NSStringFromClass(type(of: viewController)) == popUpContainerViewController
         {
-            let label = Dynamic.convert(target.subviews.first!, to: UILabel.self)
+            if let firstSubview = target.subviews.first {
+                let label = Dynamic.convert(firstSubview, to: UILabel.self)
 
-            if !label.hasParent(matching: "Primary") {
-                label.textColor = .white
+                if !label.hasParent(matching: "Primary") {
+                    label.textColor = .white
+                }
             }
         }
 

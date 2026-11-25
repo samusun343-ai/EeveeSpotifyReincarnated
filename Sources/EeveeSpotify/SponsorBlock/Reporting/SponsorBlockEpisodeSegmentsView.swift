@@ -85,7 +85,7 @@ struct SponsorBlockEpisodeSegmentsView: View {
                         .foregroundColor(.green)
                 }
             }
-            Text("\(SponsorBlockFormatters.time(seg.start)) → \(SponsorBlockFormatters.time(seg.end))  ·  \(Int(seg.duration))s")
+            Text("\(SponsorBlockFormatters.time(seg.start)) → \(SponsorBlockFormatters.time(seg.end))  ·  \(SponsorBlockFormatters.wholeSeconds(seg.duration))s")
                 .font(.system(.footnote, design: .monospaced))
                 .foregroundColor(.secondary)
             HStack(spacing: 10) {
