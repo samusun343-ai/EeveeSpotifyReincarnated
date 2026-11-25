@@ -57,6 +57,11 @@ func activatePremiumPatchingGroup() {
     }
     else if EeveeSpotify.hookTarget == .v91 {
         NonIOS14PremiumPatchingGroup().activate()
+        // The statefulPlayer capture hook moved to its own group so the
+        // 9.1.x path can activate it too; it is activated here (and in the
+        // else branch below) under exactly the conditions its old
+        // NonIOS14PremiumPatchingGroup membership implied.
+        StatefulPlayerCaptureGroup().activate()
         activateV91ServerSidedReminderIfAvailable()
         // Removed in 9.1.28; hooking a missing method is fatal.
         let trackRowsSel = Selector(("initWithViewURI:onDemandSet:onDemandTrialService:trackRowsEnabled:productState:"))
@@ -66,7 +71,8 @@ func activatePremiumPatchingGroup() {
     }
     else {
         NonIOS14PremiumPatchingGroup().activate()
-        
+        StatefulPlayerCaptureGroup().activate()
+
         if EeveeSpotify.hookTarget == .lastAvailableiOS15 {
             IOS14And15PremiumPatchingGroup().activate()
         }
@@ -359,6 +365,18 @@ struct EeveeSpotify: Tweak {
                     LyricsAvailabilityGroup().activate()
                 } else {
                     writeDebugLog("[INIT] Skipped LyricsAvailabilityGroup (SPTPlayerTrack missing)")
+                }
+
+                // Revive the statefulPlayer capture on this path: the hook
+                // used to sit in a premium-patching group that only the
+                // legacy path activates, so lyrics metadata resolution
+                // step 2 was permanently dead on 9.1.x even though the
+                // class and provideStatefulPlayerWithFeatureIdentifier:
+                // both exist in 9.2.2 (audit A-2-1).
+                if NSClassFromString("NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation") != nil {
+                    StatefulPlayerCaptureGroup().activate()
+                } else {
+                    writeDebugLog("[INIT] Skipped StatefulPlayerCaptureGroup (NowPlayingPlatformSwiftServiceImplementation missing)")
                 }
 
             }

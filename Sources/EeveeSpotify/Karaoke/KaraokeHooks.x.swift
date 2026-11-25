@@ -59,32 +59,10 @@ private let karaokeObserver = EeveeKaraokeObserver()
 class KaraokePlayerServiceObserverHook: ClassHook<NSObject> {
     typealias Group = KaraokeGroup
 
-    // "SPTPlayerServiceImplementation" alone stopped resolving as of the
-    // 9.1.78 IPA I was given to inspect — `NSClassFromString` on that bare
-    // name returned nil, which meant this hook silently never attached, the
-    // karaoke observer never registered, KaraokePlaybackTracker's
-    // currentTrackId() stayed nil forever, and the Word-Synced button never
-    // showed even with syllable lyrics confirmed fetched and stored (its own
-    // "hasData" gate depends on that trackId). Binary inspection turned up
-    // the class still present, just now apparently exported under Swift's
-    // older mangled ObjC name instead of the plain one — the same situation
-    // this codebase already has a precedent for elsewhere (see
-    // "_TtC21Settings_PlatformImpl26SettingsListViewController" in
-    // Tweak.x.swift, a different class hitting the same kind of rename).
-    // Trying the legacy name first preserves whatever older Spotify version
-    // this originally targeted; falling back to the mangled one is what
-    // should recover it on 9.1.78. If NEITHER resolves on some future
-    // version, this returns the legacy name as the last resort — same
-    // silent-no-op outcome as before, not a new failure mode.
-    static var targetName: String {
-        if NSClassFromString("SPTPlayerServiceImplementation") != nil {
-            return "SPTPlayerServiceImplementation"
-        }
-        if NSClassFromString("_TtC17Player_CommonImpl30SPTPlayerServiceImplementation") != nil {
-            return "_TtC17Player_CommonImpl30SPTPlayerServiceImplementation"
-        }
-        return "SPTPlayerServiceImplementation"
-    }
+    // The two-name fallback (plain name stopped resolving as of 9.1.78; the
+    // class is only registered under its mangled Swift name now) lives in
+    // PlayerServiceObservation so SponsorBlock resolves the same target.
+    static var targetName: String { PlayerServiceObservation.targetName }
 
     func addPlayerObserver(_ observer: AnyObject) {
         orig.addPlayerObserver(observer)
@@ -112,11 +90,8 @@ private var didDumpStateObservable = false
 // exactly when (or whether, e.g. if the relevant screen is never opened)
 // that would happen on its own.
 //
-// .perform(_:with:) rather than a typed method call: we only have this as
-// AnyObject (Orion's own generic capture, matching provideStatefulPlayer's
-// pattern elsewhere), and addPlayerObserver: is confirmed (via the dump) to
-// exist and take exactly one object argument, so this is a safe, ordinary
-// Objective-C message send — not a guess at an unconfirmed selector.
+// Registration on the returned observable goes through
+// PlayerServiceObservation.register (shared with SponsorBlock).
 class KaraokeStateObservableProbeHook: ClassHook<NSObject> {
     typealias Group = KaraokeGroup
     static var targetName: String { KaraokePlayerServiceObserverHook.targetName }
@@ -130,7 +105,7 @@ class KaraokeStateObservableProbeHook: ClassHook<NSObject> {
         if !karaokeObserverRegistered {
             karaokeObserverRegistered = true
             writeDebugLog("[Karaoke] registering playback observer on SPTEsperantoPlayer via provideStateObservable")
-            _ = observable.perform(Selector(("addPlayerObserver:")), with: karaokeObserver)
+            PlayerServiceObservation.register(karaokeObserver, onStateObservable: observable)
         }
         return observable
     }
@@ -138,14 +113,12 @@ class KaraokeStateObservableProbeHook: ClassHook<NSObject> {
 
 func activateKaraokeHooks() {
     _ = LyricsLaunchSource.value
-    // Mirrors the same two-name fallback as KaraokePlayerServiceObserverHook
-    // above — this is only the startup diagnostic log, but it should report
-    // the same "found" outcome as whichever name the hook itself resolves,
-    // or the log becomes actively misleading (saying "missing" right above
-    // a hook that then attaches fine).
-    let legacyName = "SPTPlayerServiceImplementation"
-    let mangledName = "_TtC17Player_CommonImpl30SPTPlayerServiceImplementation"
-    let resolvedClass: AnyClass? = NSClassFromString(legacyName) ?? NSClassFromString(mangledName)
+    // Uses the same shared two-name resolution as the hooks themselves —
+    // this is only the startup diagnostic log, but it should report the
+    // same "found" outcome as whichever name the hooks resolve, or the log
+    // becomes actively misleading (saying "missing" right above a hook that
+    // then attaches fine).
+    let resolvedClass = PlayerServiceObservation.resolvedClass
     let resolvedName = resolvedClass.map { NSStringFromClass($0) }
     writeDebugLog("[Karaoke] activate: class=\(resolvedName ?? "<missing>")")
     KaraokeGroup().activate()

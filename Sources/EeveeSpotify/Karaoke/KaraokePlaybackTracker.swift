@@ -76,9 +76,18 @@ final class KaraokePlaybackTracker {
             return ""
         }()
 
-        let isAdFlag = ( trackObj?.responds(to: Selector(("isAd"))) == true )
-            ? (trackObj?.value(forKey: "isAd") as? Bool ?? false)
-            : false
+        // The real key on SPTPlayerTrack is `spt_isAdvertisement` (present in
+        // the 9.2.2 selector set; audits §3.4 / A-2). The previously assumed
+        // `isAd` does not exist on the track object at all, so this flag was
+        // permanently false and only the URI-prefix rescue below ever fired.
+        // `isAdvertisement` is kept as a guarded secondary — reads are
+        // responds(to:)-guarded, so a missing key is a silent false, never
+        // the NSException an unguarded value(forKey:) would raise.
+        func adFlag(_ key: String) -> Bool {
+            guard let trackObj, trackObj.responds(to: Selector(key)) else { return false }
+            return trackObj.value(forKey: key) as? Bool ?? false
+        }
+        let isAdFlag = adFlag("spt_isAdvertisement") || adFlag("isAdvertisement")
         if isAdFlag || uriString.hasPrefix("spotify:ad:") {
             writeDebugLog("[ORACLE][AD_LEAK] Player entered ad track! uri=\(uriString) isAd=\(isAdFlag)")
         }

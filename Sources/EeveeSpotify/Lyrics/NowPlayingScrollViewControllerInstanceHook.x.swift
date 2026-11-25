@@ -83,8 +83,20 @@ class LegacyNowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject
     }
 }
 
+/// Dedicated group for the statefulPlayer capture so it can be activated on
+/// the 9.1.x path as well. The hook used to live in
+/// NonIOS14PremiumPatchingGroup, which only the legacy path activates — so
+/// on 9.1.x the capture never ran, the global `statefulPlayer` stayed nil,
+/// and lyrics metadata resolution step 2 (its most reliable source) was
+/// permanently dead even though both the class and
+/// `provideStatefulPlayerWithFeatureIdentifier:` exist in 9.2.2
+/// (audits A-2-1 / A-8 #4). Tweak.x.swift activates this group under exactly
+/// the conditions the old group membership implied on the legacy path, plus
+/// inside the lyrics gate on the 9.1.x path.
+struct StatefulPlayerCaptureGroup: HookGroup {}
+
 class NowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject> {
-    typealias Group = NonIOS14PremiumPatchingGroup
+    typealias Group = StatefulPlayerCaptureGroup
     static let targetName = "NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation"
     
     func provideStatefulPlayerWithFeatureIdentifier(_ identifier: NSString) -> StatefulPlayerImplementation {
