@@ -435,19 +435,111 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
     }
 }
 
+// The subset of propertyReplacements vetted for 9.2's remote-config v3 path
+// (see audit-922-flags.md §9). A declaration is included only when every
+// (scope, name) pair it can touch is backed in 9.2.2 — present in the binary's
+// registration literals / read keys or in a captured UCS snapshot — and its
+// consumer and intended value are the ones already established on the
+// bootstrap/customize path. Declarations whose names have no 9.2.2 backing
+// (the defensive name scatter) stay bootstrap/customize-only: they are no-ops
+// here, and older Spotify versions still need them there. Scoped declarations
+// already subsumed by a scope removal below (adonappopen's enabled /
+// background_refresh_frequency_seconds, embeddednpv's foreground_enabled /
+// music_track_change_enabled) are not repeated.
+private let v3PropertyReplacements = [
+    // capping — removing the assignment is what disables the cap; the same
+    // removals already run on the bootstrap path. enable_common_capping is
+    // also read from ios-feature-lyrics by the lyrics repository.
+    EeveePropertyReplacement(name: "enable_common_capping", modification: .remove),
+    EeveePropertyReplacement(name: "enable_pns_common_capping", modification: .remove),
+    EeveePropertyReplacement(name: "enable_pick_and_shuffle_common_capping", modification: .remove),
+    EeveePropertyReplacement(name: "enable_pick_and_shuffle_dynamic_cap", modification: .remove),
+    EeveePropertyReplacement(name: "pick_and_shuffle_timecap", modification: .remove),
+
+    // Free on-demand / MFT Plus queue gating and the playback timeout
+    // (the deadends UI pair is assigned true in the 9.1.76 snapshot; the
+    // timeout action is assigned "Pause" there and is set to "Nothing").
+    EeveePropertyReplacement(name: "enable_free_on_demand_experiment", modification: .remove),
+    EeveePropertyReplacement(name: "enable_mft_plus_queue", modification: .remove),
+    EeveePropertyReplacement(name: "enable_mft_plus_extended_queue", modification: .remove),
+    EeveePropertyReplacement(name: "enable_playback_timeout_service", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "enable_playback_timeout_error_ui", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "playback_timeout_action", modification: .setEnum("Nothing")),
+
+    // Queue feature scope (all 11 of its 9.2.2 properties are backed).
+    EeveePropertyReplacement(scope: "ios-feature-queue", modification: .remove),
+
+    // Ad scopes whose 9.2.2 property sets are backed. Removing the scope's
+    // assignments leaves the ad services on their no-config defaults, as on
+    // the bootstrap path.
+    EeveePropertyReplacement(scope: "ios-ad-on-app-open", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-adonappopen", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-marquee", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-leavebehindadsbase", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-instreamads", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-adsembedded-embeddedctaelements-impl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-adsnowplaying-embeddednpv-impl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-adsplatform-elementimpl", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-system-adssponsoredcontext", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-adsswift", modification: .remove),
+    EeveePropertyReplacement(scope: "ios-feature-adsidentitytracking", modification: .remove),
+
+    // Ads base infrastructure toggles.
+    EeveePropertyReplacement(name: "enable_ads_connect_state_observer", scope: "ios-feature-adsbase", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "enable_minimal_preroll_management", scope: "ios-feature-adsbase", modification: .setBool(false)),
+
+    // Leave-behind / Now Playing ad surfaces.
+    EeveePropertyReplacement(name: "embedded_npv_video_show_with_canvas", scope: "ios-feature-adsnowplayingui", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "unified_leavebehind_npv_scroll_music_enabled", scope: "ios-nowplaying-scroll-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "unified_leavebehind_npv_scroll_podcast_enabled", scope: "ios-nowplaying-scroll-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "use_unified_leavebehind_fetch", scope: "ios-feature-embeddedplaylist", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "music_npv_leavebehinds_enabled", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "show_skip_button_during_skippable_ads", modification: .setBool(true)),
+
+    // Search page ads & promotions (all three assigned true in snapshots).
+    EeveePropertyReplacement(name: "prompted_playlist_merchandizing_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "social_proof_plays_in_search_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+    EeveePropertyReplacement(name: "video_carousel_section_enabled", scope: "ios-feature-search", modification: .setBool(false)),
+
+    // Scoped upsells (ReinventFree / media quality / listening parties / Jam).
+    EeveePropertyReplacement(name: "is_promo_cta_enabled", scope: "ios-reinventfree-contextualupsellpremiumpromo-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "enable_video_time_cap_upsell", scope: "ios-reinventfree-controllerui-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "enable_video_time_cap_upsell_on_search", scope: "ios-reinventfree-controllerui-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "music_video_upsell_enabled", scope: "ios-reinventfree-timecappivot-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "is_gbb_upsell_enabled", scope: "ios-settings-mediaqualitypageplugin-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "should_show_pigeon_upsell", scope: "ios-settings-mediaqualitypageplugin-impl", modification: .forceBool(false)),
+    EeveePropertyReplacement(name: "preview_ended_upsell_enabled", scope: "ios-system-listeningparties", modification: .forceBool(false)),
+    EeveePropertyReplacement(
+        name: ServerSidedFeaturePolicy.premiumGatedJamEntryPoint.name,
+        scope: ServerSidedFeaturePolicy.premiumGatedJamEntryPoint.scope,
+        modification: .forceBool(false)
+    ),
+
+    // Playback settings companions to the crossfade set (automix on, and
+    // gapless read from the local prefs rather than the server's settings).
+    EeveePropertyReplacement(name: "automix_enabled", scope: "ios-feature-settings", modification: .forceBool(true)),
+    EeveePropertyReplacement(name: "use_playback_settings_gapless", scope: "ios-feature-settings", modification: .forceBool(false)),
+
+    // Lyrics share — the two share gates actually registered in 9.2.2
+    // (both assigned true in the snapshots); forceBool also seeds them
+    // when a free account's response omits them.
+    EeveePropertyReplacement(name: "enable_share_link_preview_uploads", scope: "ios-feature-lyrics", modification: .forceBool(true)),
+    EeveePropertyReplacement(name: "enable_sharing_v2", scope: "ios-feature-lyrics", modification: .forceBool(true))
+]
+
 /// Rewrites 9.2's remote configuration (remote-config-resolver/v3/configuration),
 /// a serialized `ResolveResponse`. On 9.2 it replaces the bootstrap and customize
-/// responses modifyRemoteConfiguration rewrites, so the full propertyReplacements
-/// list does not reach it; only the crossfade replacements and the lyrics
-/// has_lyrics check bypass (which gates the native NPV lyrics block — see
-/// lyricsHasLyricsCheckBypass) are applied here. Returns nil
+/// responses modifyRemoteConfiguration rewrites, so propertyReplacements does
+/// not reach it; the crossfade replacements, the lyrics has_lyrics check bypass
+/// (which gates the native NPV lyrics block — see lyricsHasLyricsCheckBypass)
+/// and the vetted v3PropertyReplacements subset are applied here. Returns nil
 /// when the bytes are not that proto or nothing changed, so the caller leaves the
 /// response untouched.
 func rewriteRemoteConfigurationData(_ data: Data) -> Data? {
     guard var response = try? ResolveResponse(serializedBytes: data),
           !response.configuration.assignedValues.isEmpty else { return nil }
 
-    let replacements = EeveeCrossfade.replacements + [lyricsHasLyricsCheckBypass]
+    let replacements = EeveeCrossfade.replacements + [lyricsHasLyricsCheckBypass] + v3PropertyReplacements
     func summary() -> String {
         replacements.compactMap { replacement in
             guard let scope = replacement.scope, let name = replacement.name else { return nil }
