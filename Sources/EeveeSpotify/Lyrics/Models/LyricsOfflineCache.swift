@@ -339,22 +339,10 @@ final class LyricsOfflineCache {
 
 // MARK: - Codable conformances for the DTOs
 //
-// Declared here, next to their only serialization user, so the model
-// files stay untouched. All stored properties of these types are
-// themselves Codable; the computed ones (plainText, isRTL, …) are not
-// part of the stored form.
-
-extension LyricsLineDto: Codable {}
-
-extension LyricsTranslationDto: Codable {}
-
-extension LyricsDto: Codable {}
-
-extension KaraokeSyllableDto: Codable {}
-
-extension KaraokeLineDto: Codable {}
-
-extension KaraokeLyricsDto: Codable {}
+// The struct conformances live in each DTO's own file: Swift only
+// synthesizes Codable for an extension in the same file as the type
+// declaration. The enum below is manual (raw-value based), so it can
+// stay here.
 
 extension LyricsRomanizationStatus: Codable {
     private var cacheRawValue: Int {

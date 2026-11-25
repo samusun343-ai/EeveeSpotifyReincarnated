@@ -4,3 +4,5 @@ struct LyricsLineDto {
     var content: String
     var offsetMs: Int?
 }
+
+extension LyricsLineDto: Codable {}

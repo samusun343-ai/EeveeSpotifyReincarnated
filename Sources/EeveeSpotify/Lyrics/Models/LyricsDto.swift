@@ -73,3 +73,6 @@ struct LyricsDto {
         return lyricsData
     }
 }
+
+// Codable for the offline lyrics cache (LyricsOfflineCache.swift).
+extension LyricsDto: Codable {}

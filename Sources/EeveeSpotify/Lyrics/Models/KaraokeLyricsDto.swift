@@ -105,3 +105,9 @@ struct KaraokeLyricsDto {
     var makerName: String? = nil
     var makerUrl: String? = nil
 }
+
+extension KaraokeSyllableDto: Codable {}
+
+extension KaraokeLineDto: Codable {}
+
+extension KaraokeLyricsDto: Codable {}
