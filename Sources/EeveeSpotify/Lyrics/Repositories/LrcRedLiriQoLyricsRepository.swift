@@ -121,7 +121,18 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         task.resume()
-        semaphore.wait()
+        // Bounded wait (audit P4): the bound is the session's own
+        // configured request timeout (lrc.red 10s, LiriQo 30s — LiriQo
+        // normally answers in ~6s and its session was deliberately
+        // given room), so any response the session would deliver still
+        // arrives; only a completion that never fires is cut, and the
+        // no-data path below throws, which the stage logic treats as a
+        // transient failure (floor kept, next stage tried, never cached
+        // as a miss).
+        let waitTimeout: TimeInterval = session === liriQoSession ? 30 : 10
+        if semaphore.wait(timeout: .now() + waitTimeout) == .timedOut {
+            task.cancel()
+        }
 
         if let error = error {
             writeDebugLog("[\(logTag)] Request error for \(stringUrl): \(error)")

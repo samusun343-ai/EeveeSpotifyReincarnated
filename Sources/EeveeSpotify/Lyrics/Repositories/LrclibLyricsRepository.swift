@@ -184,7 +184,13 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         task.resume()
-        semaphore.wait()
+        // Bounded wait (audit P4): 10s is this session's own
+        // request/resource timeout, so any response the session would
+        // deliver still arrives; only a completion that never fires is
+        // cut, and the no-data path below throws as before.
+        if semaphore.wait(timeout: .now() + 10) == .timedOut {
+            task.cancel()
+        }
 
         if error != nil, request.url != url {
             // IPv4-direct attempt failed; retry with the original hostname URL.
@@ -204,7 +210,10 @@ class LrclibLyricsRepository: LyricsRepository {
             }
 
             fallbackTask.resume()
-            fallbackSemaphore.wait()
+            // Bounded wait (audit P4): same 10s session bound as above.
+            if fallbackSemaphore.wait(timeout: .now() + 10) == .timedOut {
+                fallbackTask.cancel()
+            }
         }
 
         if let error = error {

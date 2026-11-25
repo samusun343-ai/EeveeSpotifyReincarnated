@@ -53,14 +53,21 @@ class SpicyLyricsRepository: LyricsRepository {
         var responseStatus = 0
         var responseError: Error?
 
-        session.dataTask(with: request) { data, response, error in
+        let task = session.dataTask(with: request) { data, response, error in
             responseData = data
             responseStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
             responseError = error
             semaphore.signal()
-        }.resume()
+        }
+        task.resume()
 
-        semaphore.wait()
+        // Bounded wait (audit P4): 15s is this session's own
+        // request/resource timeout, so any response the session would
+        // deliver still arrives; only a completion that never fires is
+        // cut, and the no-data path below throws as before.
+        if semaphore.wait(timeout: .now() + 15) == .timedOut {
+            task.cancel()
+        }
 
         if let error = responseError {
             eeveeLog("[EeveeSpotify][SpicyLyrics] %@ network error: %@", trackId, String(describing: error))
