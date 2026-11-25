@@ -386,6 +386,7 @@ class GlassTabBarContainerHook: ClassHook<UIViewController> {
         orig.setSelectedViewController(controller)
         guard #available(iOS 26.0, *) else { return }
         DispatchQueue.main.async {
+            CustomTabs.recheckSelection()
             guard let stock = GlassTabBar.stock else { return }
             GlassTabBar.meter.measure { GlassTabBar.sync(stock) }
         }
@@ -454,17 +455,34 @@ enum CustomTabs {
         watch?.invalidate()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
             guard selectedKey == tab.key else { return }
+            page = topController()
             watch?.invalidate()
-            watch = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-                guard let current = page else {
-                    page = topController()
-                    return
-                }
-                guard current.view.window == nil else { return }
-                deselect()
+            // The page is captured once, up front. At the old 0.5s
+            // cadence, a not-yet-captured page repeated the full
+            // scene/window walk in topController() on every tick; now
+            // the walk only repeats (at a thinned 2s cadence) while the
+            // capture is still missing, and tab switches re-run the
+            // check immediately via recheckSelection().
+            watch = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+                recheckSelection(captureIfNeeded: true)
             }
             watch?.fire()
         }
+    }
+
+    // Drops the custom-tab selection once the pushed page's view has
+    // left its window (popped, or its tab switched away). Driven by the
+    // watch timer and, as an event, by tab-selection changes.
+    static func recheckSelection(captureIfNeeded: Bool = false) {
+        guard selectedKey != nil else { return }
+        guard let current = page else {
+            if captureIfNeeded {
+                page = topController()
+            }
+            return
+        }
+        guard current.view.window == nil else { return }
+        deselect()
     }
 
     static func deselect() {

@@ -5,11 +5,7 @@ class LyricsFullscreenViewControllerHook: ClassHook<UIViewController> {
     typealias Group = BaseLyricsGroup
     
     static var targetName: String {
-        switch EeveeSpotify.hookTarget {
-        case .lastAvailableiOS14: return "Lyrics_CoreImpl.FullscreenViewController"
-        case .lastAvailableiOS15: return "Lyrics_FullscreenPageImpl.FullscreenViewController"
-        default: return "Lyrics_FullscreenElementPageImpl.FullscreenElementViewController"
-        }
+        return HookTargetNameHelper.lyricsFullscreenViewController
     }
 
     func viewDidLoad() {

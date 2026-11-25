@@ -4,28 +4,16 @@ import SwiftUI
 
 struct DarkPopUps: HookGroup { }
 
-private var popUpContainerViewController: String {
-    // For 9.1.x, use dummy UIView to avoid crashes
-    if EeveeSpotify.hookTarget == .v91 {
-        return "UIView"
-    }
-    
-    switch EeveeSpotify.hookTarget {
-    case .lastAvailableiOS14: return "SPTEncorePopUpContainer"
-    default: return "SPTEncorePopUpContainer" // Use older class for compatibility
-    }
-}
-
 class EncoreLabelHook: ClassHook<UIView> {
     typealias Group = DarkPopUps
-    
+
     static var targetName: String {
-        return EeveeSpotify.hookTarget == .v91 ? "UIView" : "SPTEncoreLabel"
+        return HookTargetNameHelper.encoreLabel
     }
 
     func intrinsicContentSize() -> CGSize {
         if let viewController = WindowHelper.shared.viewController(for: target),
-            NSStringFromClass(type(of: viewController)) == popUpContainerViewController
+            NSStringFromClass(type(of: viewController)) == HookTargetNameHelper.popUpContainer
         {
             if let firstSubview = target.subviews.first {
                 let label = Dynamic.convert(firstSubview, to: UILabel.self)
@@ -43,7 +31,7 @@ class EncoreLabelHook: ClassHook<UIView> {
 class SPTEncorePopUpContainerHook: ClassHook<UIViewController> {
     typealias Group = DarkPopUps
     static var targetName: String {
-        return popUpContainerViewController
+        return HookTargetNameHelper.popUpContainer
     }
     
     func containedView() -> SPTEncorePopUpDialog {

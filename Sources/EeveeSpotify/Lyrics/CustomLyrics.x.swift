@@ -205,10 +205,8 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     }
     
     updateLyricsState {
-        $0.isEmpty = lyricsDto.lines.isEmpty
         $0.wasRomanized = lyricsDto.romanization == .romanized
             || (lyricsDto.romanization == .canBeRomanized && UserDefaults.lyricsOptions.romanization)
-        $0.loadedSuccessfully = true
     }
 
     writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced), metadata=\(metadataStep), reportedId=\(reportedTrackId ?? "nil")")
@@ -366,20 +364,6 @@ func prefetchLyricsIfNeeded(trackId: String) {
             writeDebugLog("[Lyrics] prefetch failed for \(trackId): \(error)")
         }
     }
-}
-
-/// Returns a serialized empty `Lyrics` protobuf payload.
-/// Used as a fallback when every lyrics source (including Genius fallback) fails,
-/// so we show "no lyrics" instead of leaking Spotify's own response.
-func emptyLyricsData(originalLyrics: Lyrics? = nil) -> Data? {
-    let emptyDto = LyricsDto(lines: [], timeSynced: false, romanization: .original, translation: nil)
-    var lyrics = Lyrics.with {
-        $0.data = emptyDto.toSpotifyLyricsData(source: "")
-    }
-    if let originalLyrics = originalLyrics {
-        lyrics.colors = originalLyrics.colors
-    }
-    return try? lyrics.serializedData()
 }
 
 /// Hands over the result of a fetch that outlived the bounded wait in

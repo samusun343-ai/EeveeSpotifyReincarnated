@@ -31,7 +31,13 @@ class GeniusLyricsRepository: LyricsRepository {
             stringUrl += "?\(queryString)"
         }
         
-        let request = URLRequest(url: URL(string: stringUrl)!)
+        // The path/query are built from track metadata; a malformed
+        // string must fail the lookup, not crash it.
+        guard let url = URL(string: stringUrl) else {
+            throw LyricsError.unknownError
+        }
+
+        let request = URLRequest(url: url)
 
         let semaphore = DispatchSemaphore(value: 0)
         var data: Data?

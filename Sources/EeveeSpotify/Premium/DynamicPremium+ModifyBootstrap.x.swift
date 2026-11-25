@@ -12,10 +12,7 @@ class SpotifySessionDelegateBootstrapHook: ClassHook<NSObject>, SpotifySessionDe
     // This hook is the *core* of premium patching (intercepts bootstrap and mutates UCS).
     typealias Group = PremiumBootstrapGroup
     static var targetName: String {
-        switch EeveeSpotify.hookTarget {
-        case .lastAvailableiOS14: return "SPTCoreURLSessionDataDelegate"
-        default: return "SPTDataLoaderService"
-        }
+        return HookTargetNameHelper.sessionDelegateBootstrap
     }
     
     func URLSession(
