@@ -145,7 +145,7 @@ struct EeveeAppIconPickerView: View {
 
     private func apply(_ icon: AppIconEntry) {
         guard UIApplication.shared.supportsAlternateIcons else {
-            errorMessage = "Alternate icons are not supported on this device."
+            errorMessage = "app_icon_not_supported".localized
             return
         }
         let previous = selectedKey

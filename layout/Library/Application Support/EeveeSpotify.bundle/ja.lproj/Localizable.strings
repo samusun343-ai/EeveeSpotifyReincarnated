@@ -41,6 +41,7 @@ Genius：最高品質の歌詞を提供し、取り扱い曲数も豊富で歌�
 LRCLIB：歌詞の同期はされますが、取り扱い曲数は少ないです。";
 lyrics_additional_info = "歌詞を読み込めないときは、「この曲の歌詞を読み込めませんでした」と表示されます。検索方法のしくみの問題でGeniusを使用している場合は誤った歌詞が表示される場合があります。";
 petitlyrics_description = "PetitLyrics：日本語の歌詞が豊富で、一部の海外の曲の歌詞も表示できます。歌詞の同期もされます。";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo：3段階のソースです。まず lrc.red が応答し、CDNにキャッシュされた行同期・単語同期の歌詞を高速に返します。プレーンテキストしかない場合や曲が見つからない場合は LRCLIB に問い合わせ、最後に、11のプロバイダを集約する LiriQo が、利用可能な場合は単語同期の歌詞を返します。";
 
 genius_fallback = "Geniusを代わりに使用";
 genius_fallback_description = "%@に問題がある場合は、Geniusから歌詞を取得します。";
@@ -52,6 +53,17 @@ hide_lyrics_on_error_description = "歌詞を読み込めなかったときは�
 
 romanized_lyrics = "ローマ字の歌詞";
 romanized_lyrics_description = "日本語、中国語、韓国語のローマ字の歌詞を表示します。";
+lyrics_offline_cache_section = "オフラインキャッシュ";
+lyrics_offline_cache = "歌詞をオフライン用にキャッシュ";
+lyrics_offline_cache_description = "読み込んだ歌詞はこのデバイスに保存されるため、同じ曲をもう一度再生すると、接続がなくても、レート制限のあるプロバイダに再度問い合わせなくても、歌詞がすぐに表示されます。エントリは歌詞ソースごとに保持され、キャッシュが300曲または16 MBを超えると、古いものから自動的に削除されます。";
+lyrics_offline_cache_usage_label = "キャッシュ済みの歌詞";
+lyrics_offline_cache_usage = "%d曲 · %@";
+lyrics_offline_cache_manage = "キャッシュ済みの歌詞を管理";
+lyrics_cache_title = "キャッシュ済みの歌詞";
+lyrics_cache_empty = "キャッシュ済みの歌詞はまだありません。歌詞は、曲が読み込むときに自動的に保存されます。";
+lyrics_cache_clear_all = "キャッシュ済みの歌詞をすべて削除";
+lyrics_cache_clear_confirm_title = "キャッシュ済みの歌詞をすべて削除しますか？";
+lyrics_cache_clear_confirm_message = "各曲が次に再生されるときに、再度ダウンロードされます。";
 
 // UI
 
@@ -83,6 +95,8 @@ have_premium_popup = "プレミアム会員のため、データを変更した�
 high_audio_quality_popup = "最高音質はサーバー側で管理されているため、利用できません。";
 playlist_downloading_popup = "プレイリストをダウンロードする機能はサーバー側で管理されているため、利用できません。ポッドキャストのエピソードや自分のローカルプレイリストはダウンロードできます。";
 download_local_playlist = "ローカルプレイリストをダウンロード";
+local_playlist_download_button = "プレイリストのダウンロードボタンを表示";
+local_playlist_download_setting_hint = "このプレイリストボタンは、Wi-Fi経由でローカルファイルのみを同期します。EeveeSpotifyの設定 → その他 → プレイリストのダウンロードボタンを表示、から非表示にできます。";
 
 //
 
@@ -334,6 +348,9 @@ appearance_pages = "ページ";
 tab_bar_subtitle = "並び順、起動タブ、カスタムタブ";
 lyrics_written_by = "作詞：";
 lyrics_provided_by = "歌詞提供";
+lyrics_timing_offset_section = "歌詞のタイミング";
+lyrics_timing_offset_global = "すべてのトラック";
+lyrics_timing_offset_description = "同期歌詞の表示タイミングを早めたり遅らせたりします。プラスの値では遅く表示されます。再生中にカスタム歌詞ビューから、1曲だけを調整することもできます。";
 karaoke_section = "カスタム歌詞ビュー";
 karaoke_section_footer = "逆方向にすると行が下から上へ流れ、アクティブな行が画面の下寄りになります。ぼかしの強さは、非アクティブな行のぼかし具合を調整します。";
 karaoke_alignment = "歌詞の配置";
@@ -353,6 +370,7 @@ debug_section_footer = "ログ記録をオンにしてから、ログを書き�
 debug_logging = "デバッグログ記録";
 karaoke_enabled = "カスタム歌詞ビュー";
 karaoke_blur_intensity = "ぼかしの強さ";
+karaoke_lock_screen_line = "ロック画面に現在の行を表示（実験的）";
 
 /* MARK: Added to match en.lproj */
 
@@ -368,6 +386,13 @@ miscellaneous = "その他";
 clean_share_links = "共有リンクをクリーンにする";
 clean_share_links_description = "共有リンクからトラッキング用パラメータを削除します。";
 developer_note = "開発者からのメモ";
+retry = "再試行";
+app_icon_not_supported = "このデバイスでは代替アイコンはサポートされていません。";
+developer_note_load_failed = "開発者からのメモを読み込めませんでした";
+developer_note_not_found = "開発者からのメモが見つかりません";
+contributors_load_failed = "貢献者を読み込めませんでした";
+contributors_not_found = "貢献者が見つかりません";
+artist_downloads = "アーティストのダウンロード";
 debug_title = "デバッグ";
 export_debug_log = "デバッグログを書き出す";
 clear_debug_log = "デバッグログを消去";
@@ -408,6 +433,7 @@ action_auto = "自動";
 draftsTitle = "報告と下書き";
 errorNoPodcats = "現在再生中のポッドキャストはありません。";
 markSegment = "現在のエピソードの区間をマーク";
+markSegmentStartSet = "開始位置を%@秒に設定しました · もう一度開くと終了位置を設定できます";
 advancedTitle = "詳細設定";
 howToUseTitle = "使い方";
 creditsTitle = "クレジット";
@@ -482,3 +508,5 @@ categoriesSectionDeps1 = "オフ = 無視。表示 = バーへの描画のみ。
 spicylyrics_api_key_placeholder = "Spicy のクライアントキーを入力";
 lyrics_source_restart_popup = "新しい歌詞ソースをすべての画面で使うには、Spotify を再起動してください。再生済みの曲は、それまで以前の歌詞のままです。";
 restart_later = "あとで";
+manage_downloads = "ダウンロードを管理";
+manage_downloads_subtitle = "Pixieのオフラインダウンロード";

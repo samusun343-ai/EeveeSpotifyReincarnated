@@ -33,6 +33,7 @@ lyrics_source = "歌词来源";
 lyrics_source_description = "可以自由选择自己喜欢的歌词来源。\n\nGenius：拥有最优质的歌词，提供最多的歌曲，歌词更新速度最快。但是，不会进行实时同步。\nLRCLIB：最开放的服务，提供实时同步的歌词。但是，它缺少很多歌曲的歌词。";
 lyrics_additional_info = "如果插件无法找到歌曲或处理歌词，将看到 “无法加载这首歌的歌词” 的提示。使用 Genius 时，由于插件搜索歌曲的方式，某些歌词可能会有误。在大多数情况下，它都正常工作。";
 petitlyrics_description = "PetitLyrics：提供大量实时同步的日语歌词和一些国际歌词。";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo：三阶段来源。首先由 lrc.red 响应，提供快速的、经 CDN 缓存的逐行与逐词同步歌词；如果它只有纯文本或没有某首歌的歌词，接下来会询问 LRCLIB，最后由聚合了 11 个提供商的 LiriQo 兜底，在可用时提供逐词同步歌词。";
 
 genius_fallback = "回退到 Genius";
 genius_fallback_description = "如果 %@ 有问题，将使用 Genius 加载歌词。";
@@ -44,6 +45,17 @@ hide_lyrics_on_error_description = "如果歌词加载失败，则删除歌词�
 
 romanized_lyrics = "罗马化歌词";
 romanized_lyrics_description = "显示中文、韩语和日语的罗马化歌词。";
+lyrics_offline_cache_section = "离线缓存";
+lyrics_offline_cache = "离线缓存歌词";
+lyrics_offline_cache_description = "歌词加载后会存储在此设备上，因此再次播放同一首歌时可立即显示歌词——即使没有网络连接，也无需再次请求有速率限制的提供商。条目按歌词来源分别保存，当缓存超过 300 首歌或 16 MB 时，最旧的条目会被自动删除。";
+lyrics_offline_cache_usage_label = "已缓存的歌词";
+lyrics_offline_cache_usage = "%d 首歌 · %@";
+lyrics_offline_cache_manage = "管理已缓存的歌词";
+lyrics_cache_title = "已缓存的歌词";
+lyrics_cache_empty = "尚无缓存的歌词。歌曲加载歌词时会自动保存。";
+lyrics_cache_clear_all = "删除所有已缓存的歌词";
+lyrics_cache_clear_confirm_title = "删除所有已缓存的歌词？";
+lyrics_cache_clear_confirm_message = "每首歌下次播放时将重新下载。";
 
 // UI
 
@@ -62,7 +74,7 @@ dark_popups = "深色弹窗";
 // Experiments
 
 show_instagram_destination = "显示 Instagram 分享目标";
-show_instagram_destination_description = "始终将 Instagram 作为分享目标，更改需要重启程序。";
+show_instagram_destination_description = "始终显示 Instagram 分享目标。%@";
 
 livecontainer_sharing = "分享到 LiveContainer";
 livecontainer_sharing_description = "如果不支持所选分享目标，则分享到 LiveContainer 并复制 URL。";
@@ -81,6 +93,8 @@ have_premium_popup = "看来您有一个真实有效的 Premium 订阅，因此�
 high_audio_quality_popup = "非常高的音频质量是服务器端的，并且无法通过此插件获得。";
 playlist_downloading_popup = "原生播放列表下载是服务器端的，无法通过此插件下载。不过可以下载播客节目。";
 download_local_playlist = "下载本地播放列表";
+local_playlist_download_button = "显示播放列表下载按钮";
+local_playlist_download_setting_hint = "此播放列表按钮仅通过 Wi-Fi 同步本地文件。你可以在 EeveeSpotify 设置 → 杂项设定 → 显示播放列表下载按钮中将其隐藏。";
 
 //
 
@@ -180,6 +194,7 @@ action_auto = "自动";
 draftsTitle = "上报与草稿";
 errorNoPodcats = "当前没有正在播放的播客。";
 markSegment = "为当前节目标记片段";
+markSegmentStartSet = "起点已设为 %@ 秒 · 再次打开以设置终点";
 advancedTitle = "高级";
 howToUseTitle = "使用方法";
 creditsTitle = "致谢";
@@ -482,6 +497,9 @@ appearance_pages = "页面";
 tab_bar_subtitle = "顺序、启动标签、自定义标签";
 lyrics_written_by = "作词：";
 lyrics_provided_by = "歌词提供方";
+lyrics_timing_offset_section = "歌词时间偏移";
+lyrics_timing_offset_global = "所有曲目";
+lyrics_timing_offset_description = "将同步歌词提前或延后显示；正值表示延后显示。单首曲目可在播放时从自定义歌词视图中校正。";
 karaoke_section = "自定义歌词视图";
 karaoke_section_footer = "反向会让歌词行从下到上流动，当前行位于屏幕靠下的位置。模糊强度用于控制非当前行的模糊程度。";
 karaoke_alignment = "歌词对齐";
@@ -499,11 +517,21 @@ karaoke_word_synced_button = "自定义歌词视图";
 debug_logging = "调试日志";
 karaoke_enabled = "自定义歌词视图";
 karaoke_blur_intensity = "模糊强度";
+karaoke_lock_screen_line = "在锁屏显示当前行（实验性）";
 
 /* MARK: Added to match en.lproj */
 
 developer_note = "开发者说明";
+retry = "重试";
+app_icon_not_supported = "此设备不支持备用图标。";
+developer_note_load_failed = "加载开发者备注失败";
+developer_note_not_found = "未找到开发者备注";
+contributors_load_failed = "加载贡献者失败";
+contributors_not_found = "未找到贡献者";
+artist_downloads = "艺人下载";
 spicylyrics_api_key_placeholder = "输入 Spicy 客户端密钥";
 glass_lyrics_view = "自定义歌词视图";
 lyrics_source_restart_popup = "请重启 Spotify，以便在所有位置使用新的歌词来源。在此之前，已播放过的歌曲会保留旧歌词。";
 restart_later = "稍后";
+manage_downloads = "管理下载";
+manage_downloads_subtitle = "Pixie 离线下载";

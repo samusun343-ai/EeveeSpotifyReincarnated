@@ -43,6 +43,7 @@ Genius: Offre il maggior numero di canzoni, testi di qualità maggiore e li aggi
 LRCLIB: Il servizio più aperto, offre testi sincronizzati, ma manca di molti brani.";
 lyrics_additional_info = "Se EeveeSpotify non riesce a trovare una canzone oppure a elaborare i testi, vedrai il messaggio \"Impossibile caricare il testo per questa canzone\". I testi potrebbero comunque essere errati per alcune canzoni quando si usa Genius, a causa del modo in cui il tweak cerca le canzoni. Ho fatto in modo che funzioni nella maggior parte dei casi.";
 petitlyrics_description = "PetitLyrics: Offre numerosi testi sincronizzati in giapponese e altri internazionali.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: una sorgente in tre fasi. lrc.red risponde per primo, fornendo testi sincronizzati per riga e per parola, veloci e memorizzati nella CDN; se ha solo testo semplice o nulla per un brano, viene interpellato LRCLIB, e LiriQo — che aggrega 11 provider — è la fase finale, con testi sincronizzati per parola quando disponibili.";
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "Carica i testi da Genius se c'è un problema con %@.";
@@ -54,6 +55,17 @@ hide_lyrics_on_error_description = "Rimuovi il testo se il caricamento fallisce.
 
 romanized_lyrics = "Testi Romanizzati";
 romanized_lyrics_description = "Mostra testi romanizzati per giapponese, coreano e cinese.";
+lyrics_offline_cache_section = "Cache offline";
+lyrics_offline_cache = "Salva i testi nella cache offline";
+lyrics_offline_cache_description = "I testi vengono salvati su questo dispositivo dopo il caricamento, così quando un brano viene riprodotto di nuovo i suoi testi compaiono subito — anche senza connessione e senza interpellare di nuovo i provider con limiti di frequenza. Le voci sono conservate per sorgente dei testi e quelle più vecchie vengono rimosse automaticamente quando la cache supera 300 brani o 16 MB.";
+lyrics_offline_cache_usage_label = "Testi in cache";
+lyrics_offline_cache_usage = "%d brani · %@";
+lyrics_offline_cache_manage = "Gestisci testi in cache";
+lyrics_cache_title = "Testi in cache";
+lyrics_cache_empty = "Nessun testo in cache. I testi vengono salvati automaticamente quando un brano li carica.";
+lyrics_cache_clear_all = "Elimina tutti i testi in cache";
+lyrics_cache_clear_confirm_title = "Eliminare tutti i testi in cache?";
+lyrics_cache_clear_confirm_message = "Verranno scaricati di nuovo la prossima volta che ogni brano verrà riprodotto.";
 
 // UI
 
@@ -85,6 +97,8 @@ have_premium_popup = "Sembra che tu abbia un abbonamento Premium attivo, il twea
 high_audio_quality_popup = "La qualità audio molto alta viene gestita lato server e non è disponibile con questo tweak.";
 playlist_downloading_popup = "Il download delle playlist viene gestito lato server e non è disponibile con questo tweak. Puoi comunque scaricare i podcast e le playlist locali.";
 download_local_playlist = "Scarica playlist locale";
+local_playlist_download_button = "Mostra il pulsante di download della playlist";
+local_playlist_download_setting_hint = "Questo pulsante della playlist sincronizza solo i file locali tramite Wi-Fi. Puoi nasconderlo in Impostazioni di EeveeSpotify → Varie → Mostra il pulsante di download della playlist.";
 
 //
 
@@ -168,7 +182,7 @@ eevee_inline_subtitle_text = "Patch, testi, personalizzazioni ed esperimenti";
 "filler_category" = "Divagazioni / Riempitivi";
 "exclusive_access_category" = "Accesso esclusivo";
 
-"action_disabled" = "Off";
+action_disabled = "Disattivato";
 "action_show" = "Mostra";
 "action_manual" = "Manuale";
 "action_auto" = "Auto";
@@ -176,6 +190,7 @@ eevee_inline_subtitle_text = "Patch, testi, personalizzazioni ed esperimenti";
 "draftsTitle" = "Segnalazioni e bozze";
 "errorNoPodcats" = "Nessun podcast in riproduzione al momento.";
 "markSegment" = "Segna segmento per l'episodio corrente";
+markSegmentStartSet = "Inizio impostato a %@s · apri di nuovo per impostare la fine";
 "advancedTitle" = "Avanzate";
 "howToUseTitle" = "Come si usa";
 "creditsTitle" = "Riconoscimenti";
@@ -477,6 +492,9 @@ appearance_pages = "Pagine";
 tab_bar_subtitle = "Ordine, scheda di avvio, schede personalizzate";
 lyrics_written_by = "Scritto da:";
 lyrics_provided_by = "Testo fornito da";
+lyrics_timing_offset_section = "Tempistica dei testi";
+lyrics_timing_offset_global = "Tutti i brani";
+lyrics_timing_offset_description = "Anticipa o ritarda i testi sincronizzati; i valori positivi li mostrano più tardi. Un singolo brano può essere corretto dalla vista dei testi personalizzati durante la riproduzione.";
 karaoke_section = "Vista testi personalizzata";
 karaoke_section_footer = "La direzione inversa fa scorrere le righe dal basso verso l'alto, con la riga attiva più in basso sullo schermo. L'intensità della sfocatura controlla quanto sono sfocate le righe inattive.";
 karaoke_alignment = "Allineamento del testo";
@@ -494,6 +512,7 @@ karaoke_word_synced_button = "Vista testi personalizzata";
 debug_logging = "Registrazione debug";
 karaoke_enabled = "Vista testi personalizzata";
 karaoke_blur_intensity = "Intensità della sfocatura";
+karaoke_lock_screen_line = "Riga attuale sulla schermata di blocco (sperimentale)";
 
 /* MARK: Added to match en.lproj */
 
@@ -503,6 +522,13 @@ miscellaneous = "Varie";
 clean_share_links = "Pulisci i link di condivisione";
 clean_share_links_description = "Rimuove i parametri di tracciamento dai link condivisi.";
 developer_note = "Nota dello sviluppatore";
+retry = "Riprova";
+app_icon_not_supported = "Le icone alternative non sono supportate su questo dispositivo.";
+developer_note_load_failed = "Impossibile caricare la nota dello sviluppatore";
+developer_note_not_found = "Nessuna nota dello sviluppatore trovata";
+contributors_load_failed = "Impossibile caricare i collaboratori";
+contributors_not_found = "Nessun collaboratore trovato";
+artist_downloads = "Download dell'artista";
 prettifyIconNames = "Abbellisci i nomi delle icone";
 prettifyIconNamesDescription = "Converte trattini bassi, trattini e camelCase in spazi";
 hiddenSegmentsSB = "Segmenti nascosti (%@)";
@@ -510,3 +536,5 @@ spicylyrics_api_key_placeholder = "Inserisci la chiave client di Spicy";
 glass_lyrics_view = "Vista testi personalizzata";
 lyrics_source_restart_popup = "Riavvia Spotify per usare la nuova fonte dei testi ovunque. Fino ad allora, le canzoni già riprodotte mantengono i testi precedenti.";
 restart_later = "Più tardi";
+manage_downloads = "Gestisci download";
+manage_downloads_subtitle = "Download offline di Pixie";

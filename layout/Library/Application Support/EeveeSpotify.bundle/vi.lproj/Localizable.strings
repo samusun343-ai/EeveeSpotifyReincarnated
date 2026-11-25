@@ -46,6 +46,7 @@ Genius: Cung cấp lời bài hát có chất lượng tốt nhất, hỗ trợ 
 LRCLIB: Dịch vụ mã nguồn mở, cung cấp lời bài hát đồng bộ thời gian. Tuy nhiên, nguồn này thiếu lời cho nhiều bài hát.";
 lyrics_additional_info = "Nếu EeveeSpotify không thể tìm thấy bài hát hoặc xử lý lời bài hát, bạn sẽ thấy thông báo \"Không thể tải lời bài hát cho bài hát này\". Lời bài hát có thể bị sai đối với một số bài hát khi sử dụng Genius do cách bản vá tìm kiếm bài hát. Tôi đã tối ưu để nó hoạt động tốt trong hầu hết các trường hợp.";
 petitlyrics_description = "PetitLyrics: Cung cấp nhiều lời bài hát tiếng Nhật và một số bài hát quốc tế đồng bộ thời gian.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: Nguồn ba giai đoạn. lrc.red trả lời trước, cung cấp lời bài hát đồng bộ theo dòng và theo từ, nhanh và được lưu trong bộ nhớ đệm CDN; nếu chỉ có văn bản thuần hoặc không có gì cho một bài hát, LRCLIB sẽ được hỏi tiếp theo, và LiriQo — tổng hợp 11 nhà cung cấp — là giai đoạn cuối, với lời đồng bộ theo từ khi có sẵn.";
 
 genius_fallback = "Dự phòng bằng Genius";
 genius_fallback_description = "Sử dụng lời bài hát từ Genius nếu có sự cố với %@.";
@@ -57,6 +58,17 @@ hide_lyrics_on_error_description = "Gỡ bỏ thành phần lời bài hát nế
 
 romanized_lyrics = "Lời bài hát phiên âm (Romanized)";
 romanized_lyrics_description = "Hiển thị lời bài hát phiên âm cho tiếng Nhật, tiếng Hàn và tiếng Trung.";
+lyrics_offline_cache_section = "Bộ nhớ đệm ngoại tuyến";
+lyrics_offline_cache = "Lưu lời bài hát vào bộ nhớ đệm ngoại tuyến";
+lyrics_offline_cache_description = "Lời bài hát được lưu trên thiết bị này sau khi tải, vì vậy khi phát lại một bài hát, lời của nó sẽ hiện ngay lập tức — ngay cả khi không có kết nối, và không cần hỏi lại các nhà cung cấp bị giới hạn tốc độ. Các mục được giữ theo nguồn lời bài hát, và các mục cũ nhất sẽ tự động bị xóa khi bộ nhớ đệm vượt quá 300 bài hát hoặc 16 MB.";
+lyrics_offline_cache_usage_label = "Lời đã lưu đệm";
+lyrics_offline_cache_usage = "%d bài hát · %@";
+lyrics_offline_cache_manage = "Quản lý lời đã lưu đệm";
+lyrics_cache_title = "Lời đã lưu đệm";
+lyrics_cache_empty = "Chưa có lời nào được lưu đệm. Lời bài hát được lưu tự động khi một bài hát tải chúng.";
+lyrics_cache_clear_all = "Xóa tất cả lời đã lưu đệm";
+lyrics_cache_clear_confirm_title = "Xóa tất cả lời đã lưu đệm?";
+lyrics_cache_clear_confirm_message = "Chúng sẽ được tải xuống lại vào lần tiếp theo mỗi bài hát được phát.";
 
 // UI
 
@@ -88,6 +100,8 @@ have_premium_popup = "Có vẻ như bạn có một đăng ký gói Premium đan
 high_audio_quality_popup = "Chất lượng âm thanh rất cao do phía máy chủ quản lý và không khả dụng với bản vá này.";
 playlist_downloading_popup = "Tính năng tải xuống danh sách phát gốc do phía máy chủ quản lý và không khả dụng với bản vá này. Tuy nhiên, bạn vẫn có thể tải xuống các tập podcast và danh sách phát cục bộ.";
 download_local_playlist = "Tải xuống danh sách phát cục bộ";
+local_playlist_download_button = "Hiện nút tải xuống danh sách phát";
+local_playlist_download_setting_hint = "Nút danh sách phát này chỉ đồng bộ các tệp cục bộ qua Wi-Fi. Bạn có thể ẩn nó trong Cài đặt EeveeSpotify → Khác → Hiện nút tải xuống danh sách phát.";
 
 //
 
@@ -179,6 +193,7 @@ action_auto = "Tự động";
 draftsTitle = "Báo cáo & bản nháp";
 errorNoPodcats = "Hiện tại không có podcast nào đang phát.";
 markSegment = "Đánh dấu phân đoạn cho tập hiện tại";
+markSegmentStartSet = "Đã đặt điểm bắt đầu tại %@ giây · mở lại để đặt điểm kết thúc";
 advancedTitle = "Nâng cao";
 howToUseTitle = "Hướng dẫn sử dụng";
 creditsTitle = "Lời cảm ơn";
@@ -481,6 +496,9 @@ appearance_pages = "Trang";
 tab_bar_subtitle = "Thứ tự, tab khởi chạy, tab tùy chỉnh";
 lyrics_written_by = "Sáng tác:";
 lyrics_provided_by = "Lời bài hát được cung cấp bởi";
+lyrics_timing_offset_section = "Thời gian lời bài hát";
+lyrics_timing_offset_global = "Tất cả bài hát";
+lyrics_timing_offset_description = "Dịch chuyển lời đồng bộ sớm hơn hoặc muộn hơn; giá trị dương sẽ hiển thị muộn hơn. Một bài hát có thể được chỉnh trong chế độ xem lời tùy chỉnh khi đang phát.";
 karaoke_section = "Chế độ xem lời bài hát tùy chỉnh";
 karaoke_section_footer = "Hướng ngược khiến các dòng chạy từ dưới lên trên, dòng đang hát nằm thấp hơn trên màn hình. Cường độ làm mờ điều chỉnh mức độ mờ của các dòng không hoạt động.";
 karaoke_alignment = "Căn lề lời bài hát";
@@ -498,6 +516,7 @@ karaoke_word_synced_button = "Chế độ xem lời bài hát tùy chỉnh";
 debug_logging = "Ghi nhật ký gỡ lỗi";
 karaoke_enabled = "Chế độ xem lời bài hát tùy chỉnh";
 karaoke_blur_intensity = "Cường độ làm mờ";
+karaoke_lock_screen_line = "Dòng hiện tại trên Màn hình khóa (thử nghiệm)";
 
 /* MARK: Added to match en.lproj */
 
@@ -505,9 +524,18 @@ miscellaneous = "Khác";
 clean_share_links = "Làm sạch liên kết chia sẻ";
 clean_share_links_description = "Xóa các tham số theo dõi khỏi liên kết được chia sẻ.";
 developer_note = "Ghi chú của nhà phát triển";
+retry = "Thử lại";
+app_icon_not_supported = "Biểu tượng thay thế không được hỗ trợ trên thiết bị này.";
+developer_note_load_failed = "Không tải được ghi chú của nhà phát triển";
+developer_note_not_found = "Không tìm thấy ghi chú của nhà phát triển";
+contributors_load_failed = "Không tải được người đóng góp";
+contributors_not_found = "Không tìm thấy người đóng góp";
+artist_downloads = "Tải xuống của nghệ sĩ";
 prettifyIconNames = "Làm đẹp tên biểu tượng";
 prettifyIconNamesDescription = "Chuyển dấu gạch dưới, dấu gạch ngang và camelCase thành khoảng trắng";
 spicylyrics_api_key_placeholder = "Nhập khóa client Spicy";
 glass_lyrics_view = "Chế độ xem lời bài hát tùy chỉnh";
 lyrics_source_restart_popup = "Khởi động lại Spotify để nguồn lời bài hát mới được dùng ở mọi nơi. Các bài đã phát trước đó sẽ giữ lời cũ cho đến khi đó.";
 restart_later = "Để sau";
+manage_downloads = "Quản lý tải xuống";
+manage_downloads_subtitle = "Tải xuống ngoại tuyến Pixie";

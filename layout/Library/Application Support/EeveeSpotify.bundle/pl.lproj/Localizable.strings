@@ -47,6 +47,7 @@ LRCLIB: Najbardziej otwarte źródło, oferuje zsynchronizowane teksty. Brakuje 
 lyrics_additional_info = "Jeśli EeveeSpotify nie znajdzie utworu lub tekstu, pojawi się komunikat \"Nie udało się załadować tekstu\". Teksty z Genius mogą być błędne z powodu sposobu wyszukiwania utworów. W większości przypadków działa to poprawnie.";
 spicylyrics_description = "SpicyLyrics dostarcza teksty karaoke słowo po słowie. Domyślnie używany jest wbudowany klucz. Jeśli chcesz użyć własnego klucza, przejdź do Spicy ESR template i naciśnij „Sign in”. Po zalogowaniu zaakceptuj ToS Spicy i naciśnij „Add ESR to my account”. Po dodaniu skopiuj wygenerowany klucz, wklej go w sekcji tekstów Eevee, wróć do Spicy i kliknij „I have stored it”. Następnie przejdź do strony aplikacji.";
 petitlyrics_description = "PetitLyrics: Oferuje wiele zsynchronizowanych tekstów japońskich, ale niewiele międzynarodowych.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: źródło trzyetapowe. Najpierw odpowiada lrc.red, serwując szybkie, buforowane w CDN teksty zsynchronizowane co do wersu i słowa; jeśli ma tylko zwykły tekst albo nic dla danego utworu, następne jest LRCLIB, a LiriQo — agregujące 11 dostawców — jest etapem końcowym, z tekstami zsynchronizowanymi co do słowa, gdy są dostępne.";
 
 genius_fallback = "Fallback do Genius";
 genius_fallback_description = "Wczytuje tekst z usługi Genius, jeśli wystąpi problem z %@.";
@@ -58,6 +59,17 @@ hide_lyrics_on_error_description = "Usuń kartę tekstu piosenki, jeśli nie uda
 
 romanized_lyrics = "Zromanizowane teksty";
 romanized_lyrics_description = "Wyświetla zromanizowane teksty dla japońskiego, koreańskiego i chińskiego.";
+lyrics_offline_cache_section = "Pamięć podręczna offline";
+lyrics_offline_cache = "Zapisuj teksty w pamięci podręcznej offline";
+lyrics_offline_cache_description = "Teksty są zapisywane na tym urządzeniu po ich wczytaniu, więc ponowne odtworzenie utworu pokazuje jego tekst od razu — nawet bez połączenia i bez ponownego odpytywania dostawców z limitami zapytań. Wpisy są przechowywane według źródła tekstów, a najstarsze są automatycznie usuwane, gdy pamięć podręczna przekroczy 300 utworów lub 16 MB.";
+lyrics_offline_cache_usage_label = "Teksty w pamięci podręcznej";
+lyrics_offline_cache_usage = "%d utworów · %@";
+lyrics_offline_cache_manage = "Zarządzaj tekstami w pamięci podręcznej";
+lyrics_cache_title = "Teksty w pamięci podręcznej";
+lyrics_cache_empty = "Brak tekstów w pamięci podręcznej. Teksty są zapisywane automatycznie, gdy utwór je wczyta.";
+lyrics_cache_clear_all = "Usuń wszystkie teksty z pamięci podręcznej";
+lyrics_cache_clear_confirm_title = "Usunąć wszystkie teksty z pamięci podręcznej?";
+lyrics_cache_clear_confirm_message = "Zostaną pobrane ponownie przy następnym odtworzeniu każdego utworu.";
 
 // UI
 
@@ -97,6 +109,8 @@ have_premium_popup = "Wygląda na to, że masz aktywną subskrypcję Premium, wi
 high_audio_quality_popup = "Bardzo wysoka jakość dźwięku jest kontrolowana po stronie serwera i nie jest dostępna w tej modyfikacji.";
 playlist_downloading_popup = "Natywne pobieranie playlist jest kontrolowane po stronie serwera i nie jest dostępne w tej modyfikacji. Możesz jednak pobierać odcinki podcastów i lokalne listy odtwarzania";
 download_local_playlist = "Pobierz lokalną playlistę";
+local_playlist_download_button = "Pokaż przycisk pobierania playlisty";
+local_playlist_download_setting_hint = "Ten przycisk playlisty synchronizuje tylko pliki lokalne przez Wi-Fi. Możesz go ukryć w Ustawieniach EeveeSpotify → Pozostałe → Pokaż przycisk pobierania playlisty.";
 
 //
 
@@ -125,6 +139,13 @@ liked_songs = "Polubione utwory";
 
 contributors = "Współtwórcy";
 developer_note = "Notatka dewelopera";
+retry = "Spróbuj ponownie";
+app_icon_not_supported = "Alternatywne ikony nie są obsługiwane na tym urządzeniu.";
+developer_note_load_failed = "Nie udało się wczytać notatki dewelopera";
+developer_note_not_found = "Nie znaleziono notatki dewelopera";
+contributors_load_failed = "Nie udało się wczytać współtwórców";
+contributors_not_found = "Nie znaleziono współtwórców";
+artist_downloads = "Pobrane od artysty";
 
 lrclib_api = "Adres serwera";
 
@@ -191,6 +212,7 @@ action_auto = "Auto";
 draftsTitle = "Zgłoszenia i szkice";
 errorNoPodcats = "Obecnie nie jest odtwarzany żaden podcast.";
 markSegment = "Oznacz segment bieżącego odcinka";
+markSegmentStartSet = "Początek ustawiony na %@ s · otwórz ponownie, aby ustawić koniec";
 advancedTitle = "Zaawansowane";
 howToUseTitle = "Jak używać";
 creditsTitle = "Podziękowania";
@@ -493,6 +515,9 @@ appearance_pages = "Strony";
 tab_bar_subtitle = "Kolejność, karta startowa, własne karty";
 lyrics_written_by = "Autorzy tekstu:";
 lyrics_provided_by = "Tekst dostarczył";
+lyrics_timing_offset_section = "Synchronizacja tekstów";
+lyrics_timing_offset_global = "Wszystkie utwory";
+lyrics_timing_offset_description = "Przesuwa zsynchronizowane teksty wcześniej lub później; wartości dodatnie pokazują je później. Pojedynczy utwór można poprawić w widoku niestandardowych tekstów podczas jego odtwarzania.";
 karaoke_section = "Własny widok tekstów";
 karaoke_section_footer = "Odwrócony kierunek przesuwa wiersze od dołu do góry, a aktywny wiersz znajduje się niżej na ekranie. Intensywność rozmycia określa, jak bardzo rozmyte są nieaktywne wiersze.";
 karaoke_alignment = "Wyrównanie tekstu";
@@ -509,6 +534,7 @@ karaoke_word_synced_button = "Własny widok tekstów";
 debug_logging = "Dziennik debugowania";
 karaoke_enabled = "Własny widok tekstów";
 karaoke_blur_intensity = "Intensywność rozmycia";
+karaoke_lock_screen_line = "Bieżący wers na ekranie blokady (eksperymentalne)";
 
 /* MARK: Added to match en.lproj */
 
@@ -516,3 +542,5 @@ spicylyrics_api_key_placeholder = "Wpisz klucz klienta Spicy";
 glass_lyrics_view = "Własny widok tekstów";
 lyrics_source_restart_popup = "Uruchom Spotify ponownie, aby nowe źródło tekstów było używane wszędzie. Utwory odtworzone wcześniej zachowają dotychczasowe teksty do tego czasu.";
 restart_later = "Później";
+manage_downloads = "Zarządzaj pobranymi";
+manage_downloads_subtitle = "Pobrane offline Pixie";

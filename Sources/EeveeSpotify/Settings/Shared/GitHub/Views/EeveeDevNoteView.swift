@@ -37,14 +37,14 @@ struct EeveeDevNoteView: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
                     .foregroundColor(.orange)
-                Text("Failed to load developer note")
+                Text("developer_note_load_failed".localized)
                     .font(.headline)
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                Button("Retry") {
+                Button("retry".localized) {
                     isLoading = true
                     errorMessage = nil
                     loadDevNote()
@@ -59,7 +59,7 @@ struct EeveeDevNoteView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         } else {
-            Text("No developer note found")
+            Text("developer_note_not_found".localized)
                 .foregroundColor(.gray)
         }
     }

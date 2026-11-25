@@ -1,14 +1,14 @@
 /* MARK: Settings */
 
-patching = "Patching";
-lyrics = "Lyrics";
-customization = "Customization";
-experiments = "Experiments";
+patching = "प्याचिङ";
+lyrics = "गीत";
+customization = "अनुकूलन";
+experiments = "प्रयोगहरू";
 
 common_issues_tip_title = "Samasya Aayo?";
 
 common_issues_tip_message = "Yadi tapai lai kunai samasya aayo, jastai geet bajna nasakne, ta bhane hernus";
-common_issues_tip_button = "Common Issues";
+common_issues_tip_button = "सामान्य समस्याहरू";
 
 reset_data = "Data Reset garne";
 reset_data_description = "Cache bhaeko data reset garera app re-start garnuhos.";
@@ -27,7 +27,7 @@ Yedi tapai sanga active Premium subscription chha vaney cha bhane, 'Do Not Patch
 
 %@";
 
-overwrite_configuration = "Overwrite Configuration";
+overwrite_configuration = "कन्फिगरेसन अधिलेखन गर्नुहोस्";
 overwrite_configuration_description = "Remote configuration lai dumped Premium configuration sanga replace garne. Yo configuration le dherai UI/UX parameters change garcha ra kunai kunai samasya aaye help garna sakcha, tara naya samasya pani niklina sakchha.";
 
 // Lyrics
@@ -41,17 +41,29 @@ Genius: Sabai bhanda ramro lyric source, dherai geet haru ko lyrics dincha, ra s
 LRCLIB: Sabai bhanda khulla service, time-synced lyrics dincha. Tara, dherai geet haru ko lyrics hudaina.";
 lyrics_additional_info = "Yadi EeveeSpotify le kunai geet khojna nasake ya lyrics process garna nasake, tapai le 'Yo geet ko lyrics load garna sakiyena' vanera message dekhnuhunechha. Genius prayog garda kunai kunai geet haru ko lyrics galat huna sakcha tweak le kasari khojcha bhanne kurama adharit hunale. Maile yo sakesamma kaam garne banayeko chu.";
 petitlyrics_description = "PetitLyrics: Dherai Japanese ra kehi international geet haru ko time-synced lyrics dincha.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: तीन-चरणको स्रोत। lrc.red ले पहिले जवाफ दिन्छ, CDN-क्यास गरिएका लाइन- र शब्द-सिंक गीतहरू छिटो प्रदान गर्दै; यदि यससँग सादा पाठ मात्र छ वा गीतको लागि केही छैन भने, अर्को LRCLIB लाई सोधिन्छ, र LiriQo — 11 प्रदायकहरूलाई एकत्रित गर्ने — अन्तिम चरण हो, उपलब्ध हुँदा शब्द-सिंक गीतहरूसहित।";
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "Yadi %@ ma samasya aayo bhane Genius bata lyrics load garney.";
 
 show_fallback_reasons = "Fallback Ko reason Dekhaunuhos";
 
-hide_lyrics_on_error = "Hide on Error";
+hide_lyrics_on_error = "त्रुटिमा लुकाउनुहोस्";
 hide_lyrics_on_error_description = "Lyrics load vayena vaney Lyrics component lai hataune.";
 
-romanized_lyrics = "Romanized Lyrics";
+romanized_lyrics = "रोमनकृत गीत";
 romanized_lyrics_description = "Japanese, Korean, ra Chinese language ka geet haru ko Romanized lyrics dekhaune.";
+lyrics_offline_cache_section = "अफलाइन क्यास";
+lyrics_offline_cache = "गीतहरू अफलाइन क्यास गर्नुहोस्";
+lyrics_offline_cache_description = "गीतहरू लोड भएपछि यस यन्त्रमा भण्डारण हुन्छन्, त्यसैले गीत फेरि बजाउँदा यसका गीतहरू तुरुन्तै देखिन्छन् — जडान बिना पनि, र दर-सीमित प्रदायकहरूलाई फेरि नसोधीकन। प्रविष्टिहरू गीत स्रोत अनुसार राखिन्छन्, र क्यास 300 गीत वा 16 MB नाघेपछि सबैभन्दा पुराना स्वतः हटाइन्छन्।";
+lyrics_offline_cache_usage_label = "क्यास गरिएका गीतहरू";
+lyrics_offline_cache_usage = "%d गीतहरू · %@";
+lyrics_offline_cache_manage = "क्यास गरिएका गीतहरू व्यवस्थापन गर्नुहोस्";
+lyrics_cache_title = "क्यास गरिएका गीतहरू";
+lyrics_cache_empty = "अझै कुनै क्यास गरिएका गीतहरू छैनन्। गीतहरू गीतले लोड गर्दा स्वतः सुरक्षित हुन्छन्।";
+lyrics_cache_clear_all = "सबै क्यास गरिएका गीतहरू मेटाउनुहोस्";
+lyrics_cache_clear_confirm_title = "सबै क्यास गरिएका गीतहरू मेटाउने?";
+lyrics_cache_clear_confirm_message = "प्रत्येक गीत अर्को पटक बज्दा तिनीहरू फेरि डाउनलोड हुनेछन्।";
 
 // UI
 
@@ -63,10 +75,10 @@ Tapai le static color ya extracted track cover ko color adharit yeuta normalizat
 display_original_colors = "Original Colors Dekhaunuhos";
 
 use_static_color = "Static Color use Garnuhos";
-static_color = "Static Color";
+static_color = "स्थिर रङ";
 
-color_normalization_factor = "Color Normalization Factor";
-dark_popups = "Dark PopUps";
+color_normalization_factor = "रङ सामान्यीकरण कारक";
+dark_popups = "गाढा पपअपहरू";
 
 // Experiments
 
@@ -83,6 +95,8 @@ have_premium_popup = "Tapai sanga Premium subscription chha jasto dekhincha, tes
 high_audio_quality_popup = "High audio quality server-sided ho ra yo tweak ma available chaina.";
 playlist_downloading_popup = "Native playlist download server-sided ho ra yo tweak ma upalabdha chainaa. Tara tapai podcast episode ra local playlist download garnu saknuhunchha.";
 download_local_playlist = "Local Playlist Download Garnuhos";
+local_playlist_download_button = "प्लेलिस्ट डाउनलोड बटन देखाउनुहोस्";
+local_playlist_download_setting_hint = "यो प्लेलिस्ट बटनले Wi-Fi मार्फत स्थानीय फाइलहरू मात्र सिंक गर्छ। तपाईं यसलाई EeveeSpotify सेटिङहरू → विविध → प्लेलिस्ट डाउनलोड बटन देखाउनुहोस् मा लुकाउन सक्नुहुन्छ।";
 
 //
 
@@ -90,15 +104,15 @@ could_not_share_popup = "Selected destination wa LiveContainer ma share garna mi
 
 /* MARK: Lyrics */
 
-fallback_attribute = "Fallback";
-romanized_attribute = "Romanized";
+fallback_attribute = "फलब्याक";
+romanized_attribute = "रोमनकृत";
 
 // Errors Titles
 
 no_such_song = "Kunai Geet Paayena";
-decoding_error = "Decoding Error";
-no_current_track = "No Track Instance";
-unknown_error = "Unknown Error";
+decoding_error = "डिकोडिङ त्रुटि";
+no_current_track = "कुनै ट्र्याक इन्स्ट्यान्स छैन";
+unknown_error = "अज्ञात त्रुटि";
 
 // Instrumental Titles
 
@@ -109,7 +123,7 @@ let_the_music_play = "Geet bajna dinuhos...";
 
 liked_songs = "Man Parne Geet";
 
-contributors = "Contributors";
+contributors = "योगदानकर्ताहरू";
 
 lrclib_api = "Server ko Address";
 
@@ -334,6 +348,9 @@ appearance_pages = "पृष्ठहरू";
 tab_bar_subtitle = "क्रम, सुरुको ट्याब, आफ्नै ट्याबहरू";
 lyrics_written_by = "लेखक:";
 lyrics_provided_by = "लिरिक्स उपलब्ध गराउने";
+lyrics_timing_offset_section = "गीत समय";
+lyrics_timing_offset_global = "सबै ट्र्याकहरू";
+lyrics_timing_offset_description = "सिंक गरिएका गीतहरूलाई अघि वा पछि सार्छ; सकारात्मक मानहरूले तिनीहरूलाई पछि देखाउँछन्। एउटा ट्र्याक बजिरहेको बेला अनुकूल गीत दृश्यबाट सच्याउन सकिन्छ।";
 karaoke_section = "आफ्नै लिरिक्स दृश्य";
 karaoke_section_footer = "उल्टो दिशाले लाइनहरूलाई तलबाट माथि बगाउँछ, सक्रिय लाइन स्क्रिनमा तल रहन्छ। ब्लर तीव्रताले निष्क्रिय लाइनहरू कति धमिला देखिने भन्ने नियन्त्रण गर्छ।";
 karaoke_alignment = "लिरिक्स पङ्क्तिबद्धता";
@@ -353,6 +370,7 @@ debug_section_footer = "लगिङ अन गर्नुहोस्, त्�
 debug_logging = "डिबग लगिङ";
 karaoke_enabled = "आफ्नै लिरिक्स दृश्य";
 karaoke_blur_intensity = "ब्लर तीव्रता";
+karaoke_lock_screen_line = "लक स्क्रिनमा हालको लाइन (प्रयोगात्मक)";
 
 /* MARK: Added to match en.lproj */
 
@@ -361,124 +379,134 @@ glass_lyrics_view = "आफ्नै लिरिक्स दृश्य";
 /* MARK: Not yet translated — English text shown until a translator updates these */
 
 sponsorblock = "SponsorBlock (BETA)";
-appIcon = "App Icon";
+appIcon = "एप आइकन";
 true_shuffle = "True Shuffle";
-true_shuffle_dec = "Blocks Spotify's free-tier Smart Shuffle from mixing recommended tracks into your queue. Shuffle stays inside the playlist. ";
-miscellaneous = "Miscellaneous";
-clean_share_links = "Clean Share Links";
-clean_share_links_description = "Removes tracking parameters from shared links.";
-developer_note = "Developer's Note";
-debug_title = "Debug";
-export_debug_log = "Export Debug Log";
-clear_debug_log = "Clear Debug Log";
-debug_log_cleared = "Debug log cleared.";
+true_shuffle_dec = "Spotify को नि:शुल्क योजनाको Smart Shuffle लाई तपाईंको लाममा सिफारिस गरिएका ट्र्याकहरू मिसाउनबाट रोक्छ। Shuffle प्लेलिस्ट भित्रै रहन्छ।";
+miscellaneous = "विविध";
+clean_share_links = "साझा लिङ्कहरू सफा गर्नुहोस्";
+clean_share_links_description = "साझा लिङ्कहरूबाट ट्र्याकिङ प्यारामिटरहरू हटाउँछ।";
+developer_note = "विकासकर्ताको टिप्पणी";
+retry = "फेरि प्रयास गर्नुहोस्";
+app_icon_not_supported = "यस यन्त्रमा वैकल्पिक आइकनहरू समर्थित छैनन्।";
+developer_note_load_failed = "विकासकर्ताको टिप्पणी लोड गर्न सकिएन";
+developer_note_not_found = "विकासकर्ताको टिप्पणी फेला परेन";
+contributors_load_failed = "योगदानकर्ताहरू लोड गर्न सकिएन";
+contributors_not_found = "योगदानकर्ताहरू फेला परेनन्";
+artist_downloads = "कलाकारका डाउनलोडहरू";
+debug_title = "डिबग";
+export_debug_log = "डिबग लग निर्यात गर्नुहोस्";
+clear_debug_log = "डिबग लग खाली गर्नुहोस्";
+debug_log_cleared = "डिबग लग खाली गरियो।";
 debug_log_cleared_ok = "OK";
 no_debug_log_found_ok = "OK";
-resetButtonTitle = "Full Reset";
-resetSubtitle = "Each is independent.";
-resetFooter = "Force re-login. Wipes Spotify keychain entries, sandbox dirs, and app-group containers. Other sideloaded apps untouched. App exits when done.";
-eevee_inline_subtitle_text = "Patching, lyrics, customization, and experiments";
-appIconTitle = "Choose Icon";
-appIconSubtitle = "iOS shows a confirmation the first time. The home screen may take a few seconds to refresh.";
-iconSelected = "Selected";
-iconTapToApply = "Tap to apply";
-prettifyIconNames = "Prettify Icon Names";
-prettifyIconNamesDescription = "Converts underscores, hyphens, and camelCase into spaces";
-categoryOneFooter = "Skips community-marked segments in podcast episodes.";
-enableSponsorblock = "Enable SponsorBlock";
-showColoredOverlay = "Show colored overlay on progress bar";
-showToast = "Show toast when skipping";
-skipToast = "Skip-toast action buttons (vote / undo / hide)";
-respectManualSeek = "Respect manual seek (don't re-skip)";
-categoriesHeader = "Categories";
-categoriesFooter = "Off · Show · Manual · Auto. Tap the color circle to change.";
-sponsor_category = "Sponsor";
-selfpromo_category = "Unpaid/Self Promotion";
-interaction_category = "Interaction Reminder";
-intro_category = "Intermission/Intro";
-outro_category = "Outro/Credits";
-preview_category = "Preview/Recap";
-hook_category = "Hook/Greetings";
-filler_category = "Tangent/Filler";
-exclusive_access_category = "Exclusive Access";
-action_disabled = "Off";
-action_show = "Show";
-action_manual = "Manual";
-action_auto = "Auto";
-draftsTitle = "Reporting & drafts";
-errorNoPodcats = "No podcast is currently playing.";
-markSegment = "Mark segment for current episode";
-advancedTitle = "Advanced";
-howToUseTitle = "How to use";
-creditsTitle = "Credits";
-creditsSubtitle = "Segment data from the SponsorBlock community (sponsor.ajay.app). Integration ported from Spot-SponsorBlock-Extension by Spot-SponsorBlock.";
-linkButtonTitle = "Spot-SponsorBlock-Extension on GitHub";
-sponsorblock_reports_title = "SponsorBlock Reports";
-sponsorblockIDTitle = "Your SponsorBlock ID";
-sponsorblockIDFooter = "Used to attribute your submissions and votes. Treat as a private password — don't share it.";
-user_id_copied = "User ID copied";
-copyButton = "Copy";
-regenerateButton = "Regenerate";
-draftsTitleSB = "Drafts";
-draftsEmpty = "No drafts. Long-press the podcast progress bar to start marking a segment.";
-draftsEpisodeLoc = "Episode %@";
-hidden_locally_header = "Hidden locally (%@)";
-hiddenFooter = "Segments here are never auto-skipped on this device. They still exist on the SponsorBlock server.";
-hiddenSegmentsEmpty = "No hidden segments.";
-unhideButton = "Unhide";
-popUpRegenerateTitle = "Regenerate user ID?";
-popUpRegenerateSubtitle = "Your existing submissions and votes will no longer be linked to you.";
-popUpClearAllButton = "Clear all";
-popUpClearAllTitle = "Clear all hidden segments?";
-popUpClearAllSubtitle = "They will skip again according to your category rules.";
-readyButton = "Ready";
-incompleteButton = "Incomplete";
-editSubmit = "Edit / Submit";
-discardButton = "Discard";
-skipBehaviourTitle = "Skipping behavior";
-autoSkipSubmissionsTitle = "Auto-skip my own submissions";
-logOnlyToggle = "Log only (don't actually seek)";
-serverHeader = "Server";
+resetButtonTitle = "पूर्ण रिसेट";
+resetSubtitle = "प्रत्येक स्वतन्त्र छ।";
+resetFooter = "जबरजस्ती पुनः लगइन गर्छ। Spotify किचेन प्रविष्टिहरू, स्यान्डबक्स डाइरेक्टरीहरू, र एप-समूह कन्टेनरहरू मेटाउँछ। अन्य साइडलोड गरिएका एपहरू अछूत छन्। सकिएपछि एप बन्द हुन्छ।";
+eevee_inline_subtitle_text = "प्याचिङ, गीत, अनुकूलन, र प्रयोगहरू";
+appIconTitle = "आइकन छान्नुहोस्";
+appIconSubtitle = "iOS ले पहिलो पटक पुष्टि देखाउँछ। गृह स्क्रिन ताजा हुन केही सेकेन्ड लाग्न सक्छ।";
+iconSelected = "चयन गरियो";
+iconTapToApply = "लागू गर्न ट्याप गर्नुहोस्";
+prettifyIconNames = "आइकन नामहरू सुन्दर बनाउनुहोस्";
+prettifyIconNamesDescription = "अन्डरस्कोर, हाइफन, र camelCase लाई खाली स्थानमा रूपान्तरण गर्छ";
+categoryOneFooter = "पोडकास्ट एपिसोडहरूमा समुदायले चिन्ह लगाएका खण्डहरू छोड्छ।";
+enableSponsorblock = "SponsorBlock सक्षम गर्नुहोस्";
+showColoredOverlay = "प्रगति बारमा रङ्गीन ओभरले देखाउनुहोस्";
+showToast = "छोड्दा टोस्ट देखाउनुहोस्";
+skipToast = "छोड्ने टोस्ट कार्य बटनहरू (भोट / पूर्ववत / लुकाउनुहोस्)";
+respectManualSeek = "म्यानुअल खोजको सम्मान गर्नुहोस् (फेरि नछोड्नुहोस्)";
+categoriesHeader = "कोटीहरू";
+categoriesFooter = "बन्द · देखाउनुहोस् · म्यानुअल · स्वतः। परिवर्तन गर्न रङको घेरा ट्याप गर्नुहोस्।";
+sponsor_category = "प्रायोजक";
+selfpromo_category = "अवैतनिक/स्व-प्रचार";
+interaction_category = "अन्तरक्रिया रिमाइन्डर";
+intro_category = "इन्टरलुड/इन्ट्रो";
+outro_category = "आउट्रो/श्रेय";
+preview_category = "पूर्वावलोकन/सारांश";
+hook_category = "हुक/अभिवादन";
+filler_category = "विषयान्तर/भराव";
+exclusive_access_category = "विशेष पहुँच";
+action_disabled = "बन्द";
+action_show = "देखाउनुहोस्";
+action_manual = "म्यानुअल";
+action_auto = "स्वतः";
+draftsTitle = "रिपोर्ट र मस्यौदाहरू";
+errorNoPodcats = "हाल कुनै पोडकास्ट बजिरहेको छैन।";
+markSegment = "हालको एपिसोडको लागि खण्ड चिन्ह लगाउनुहोस्";
+markSegmentStartSet = "सुरुवात %@ सेकेन्डमा सेट गरियो · अन्त्य सेट गर्न फेरि खोल्नुहोस्";
+advancedTitle = "उन्नत";
+howToUseTitle = "कसरी प्रयोग गर्ने";
+creditsTitle = "श्रेय";
+creditsSubtitle = "SponsorBlock समुदाय (sponsor.ajay.app) बाट खण्ड डेटा। Spot-SponsorBlock द्वारा Spot-SponsorBlock-Extension बाट पोर्ट गरिएको एकीकरण।";
+linkButtonTitle = "GitHub मा Spot-SponsorBlock-Extension";
+sponsorblock_reports_title = "SponsorBlock रिपोर्टहरू";
+sponsorblockIDTitle = "तपाईंको SponsorBlock ID";
+sponsorblockIDFooter = "तपाईंका पेशहरू र भोटहरू तपाईंसँग जोड्न प्रयोग गरिन्छ। निजी पासवर्ड जस्तै व्यवहार गर्नुहोस् — साझा नगर्नुहोस्।";
+user_id_copied = "प्रयोगकर्ता ID प्रतिलिपि गरियो";
+copyButton = "प्रतिलिपि गर्नुहोस्";
+regenerateButton = "पुनः उत्पन्न गर्नुहोस्";
+draftsTitleSB = "मस्यौदाहरू";
+draftsEmpty = "कुनै मस्यौदा छैन। खण्ड चिन्ह लगाउन सुरु गर्न पोडकास्ट प्रगति बार थिचेर राख्नुहोस्।";
+draftsEpisodeLoc = "एपिसोड %@";
+hidden_locally_header = "स्थानीय रूपमा लुकाइएको (%@)";
+hiddenFooter = "यहाँका खण्डहरू यस यन्त्रमा कहिल्यै स्वतः छोडिँदैनन्। तिनीहरू अझै SponsorBlock सर्भरमा अवस्थित छन्।";
+hiddenSegmentsEmpty = "कुनै लुकेका खण्डहरू छैनन्।";
+unhideButton = "फेरि देखाउनुहोस्";
+popUpRegenerateTitle = "प्रयोगकर्ता ID पुनः उत्पन्न गर्ने?";
+popUpRegenerateSubtitle = "तपाईंका अवस्थित पेशहरू र भोटहरू अब तपाईंसँग जोडिने छैनन्।";
+popUpClearAllButton = "सबै खाली गर्नुहोस्";
+popUpClearAllTitle = "सबै लुकेका खण्डहरू खाली गर्ने?";
+popUpClearAllSubtitle = "तिनीहरू तपाईंका कोटी नियमहरू अनुसार फेरि छोडिनेछन्।";
+readyButton = "तयार";
+incompleteButton = "अपूर्ण";
+editSubmit = "सम्पादन / पेश गर्नुहोस्";
+discardButton = "त्याग्नुहोस्";
+skipBehaviourTitle = "छोड्ने व्यवहार";
+autoSkipSubmissionsTitle = "मेरा आफ्नै पेशहरू स्वतः छोड्नुहोस्";
+logOnlyToggle = "लग मात्र (वास्तवमा नछोड्नुहोस्)";
+serverHeader = "सर्भर";
 urlText = "URL";
-tuningTitle = "Tuning";
-minSegmentDuration = "Min segment duration: %.1fs";
-toastDuration = "Toast duration: %.1fs";
-trackLogSubtitle = "Dumps podcast track metadata (URI, isPodcast, isVideo, etc.) to the debug log on each new track. Enable only when SponsorBlock isn't detecting a podcast you expect.";
-trackLogToggle = "Diagnostic track log";
-resetButtonTrackLog = "Reset…";
-resetTitle = "Reset what?";
-allResetSB = "Everything (all of the above)";
-regenerateIDSB = "Regenerate user ID";
-localSubmissionsSB = "My local submissions (%@)";
-votedRecordsSB = "Voted records (%@)";
-hiddenSegmentsSB = "Hidden segments (%@)";
-draftsCountSB = "Draft (%@)";
-settingsResetSB = "Settings (toggles + categories + colors)";
-playerGesturesTitle = "Gestures on the player";
-gesturesTitle1 = "Long-press the progress bar";
-gesturesDeps1 = "Mark a segment start. Long-press again at the end of the segment to set END and open the submission form.";
-gesturesTitle2 = "Tap a segment on the bar";
-gesturesDeps2 = "Vote, change category, or hide a segment on this device only.";
-submittingTitle = "Submitting";
-submittingSectionTitle1 = "Submission form";
-submittingSectionDeps1 = "Sliders + nudge buttons fine-tune start/end. Pick a category. Submit posts to sponsor.ajay.app.";
-submittingSectionTitle2 = "Your local submissions";
-submittingSectionDeps2 = "Auto-skipped on this device immediately. Voting unlocks once the server publishes them. The 'MINE' badge marks them.";
-skipToastTitle = "Skip toast";
-skipToastSectionTitle1 = "Undo";
-skipToastSectionDeps1 = "Seeks back to segment start. The segment plays through this once. Forward + back resets it so it re-skips.";
-skipToastSectionTitle2 = "Upvote / Downvote";
-skipToastSectionDeps2 = "👍 records your vote on the server. 👎 opens a menu to downvote, hide locally, or change category.";
-skipToastSectionTitle3 = "Full segment menu";
-skipToastSectionDeps3 = "Same options as tapping the segment on the progress bar.";
-managingSegmentsTitle = "Managing segments";
-managingSegmentsSectionTitle1 = "Manage segments…";
-managingSegmentsSectionDeps1 = "Long-press the bar → 'Manage segments' lists every segment for the current episode. Vote, hide, change category, or tap a row to jump the player.";
-managingSegmentsSectionTitle2 = "Reporting & drafts";
-managingSegmentsSectionDeps2 = "Settings → 'Reporting & drafts' holds your in-progress drafts (unfinished marks) and your hidden segments. Drafts persist across launches.";
-categoriesTitle = "Categories";
-categoriesSectionTitle1 = "Per-category actions";
-categoriesSectionDeps1 = "Off = ignore. Show = draw on the bar only. Manual = prompt before skipping. Auto = skip silently.";
-spicylyrics_api_key_placeholder = "Enter the Spicy client key";
-lyrics_source_restart_popup = "Restart Spotify so the new lyrics source is used everywhere. Songs you already played keep their old lyrics until then.";
-restart_later = "Later";
+tuningTitle = "मिलान";
+minSegmentDuration = "न्यूनतम खण्ड अवधि: %.1fs";
+toastDuration = "टोस्ट अवधि: %.1fs";
+trackLogSubtitle = "प्रत्येक नयाँ ट्र्याकमा पोडकास्ट ट्र्याक मेटाडेटा (URI, isPodcast, isVideo, आदि) डिबग लगमा डम्प गर्छ। SponsorBlock ले अपेक्षित पोडकास्ट पत्ता नलगाएको बेला मात्र सक्षम गर्नुहोस्।";
+trackLogToggle = "निदान ट्र्याक लग";
+resetButtonTrackLog = "रिसेट…";
+resetTitle = "के रिसेट गर्ने?";
+allResetSB = "सबै (माथिका सबै)";
+regenerateIDSB = "प्रयोगकर्ता ID पुनः उत्पन्न गर्नुहोस्";
+localSubmissionsSB = "मेरा स्थानीय पेशहरू (%@)";
+votedRecordsSB = "भोट गरिएका रेकर्डहरू (%@)";
+hiddenSegmentsSB = "लुकेका खण्डहरू (%@)";
+draftsCountSB = "मस्यौदा (%@)";
+settingsResetSB = "सेटिङहरू (टगलहरू + कोटीहरू + रङहरू)";
+playerGesturesTitle = "प्लेयरमा इशाराहरू";
+gesturesTitle1 = "प्रगति बार थिचेर राख्नुहोस्";
+gesturesDeps1 = "खण्डको सुरुवात चिन्ह लगाउँछ। अन्त्य सेट गर्न र पेश फारम खोल्न खण्डको अन्त्यमा फेरि थिचेर राख्नुहोस्।";
+gesturesTitle2 = "बारमा खण्ड ट्याप गर्नुहोस्";
+gesturesDeps2 = "भोट दिनुहोस्, कोटी परिवर्तन गर्नुहोस्, वा यस यन्त्रमा मात्र खण्ड लुकाउनुहोस्।";
+submittingTitle = "पेश गर्दै";
+submittingSectionTitle1 = "पेश फारम";
+submittingSectionDeps1 = "स्लाइडरहरू + नज बटनहरूले सुरुवात/अन्त्य मिलाउँछन्। कोटी छान्नुहोस्। पेश गर्दा sponsor.ajay.app मा पोस्ट हुन्छ।";
+submittingSectionTitle2 = "तपाईंका स्थानीय पेशहरू";
+submittingSectionDeps2 = "यस यन्त्रमा तुरुन्तै स्वतः छोडिन्छन्। सर्भरले तिनीहरूलाई प्रकाशित गरेपछि भोट खुल्छ। 'मेरो' ब्याजले तिनीहरूलाई चिन्ह लगाउँछ।";
+skipToastTitle = "छोड्ने टोस्ट";
+skipToastSectionTitle1 = "पूर्ववत गर्नुहोस्";
+skipToastSectionDeps1 = "खण्डको सुरुवातमा फिर्ता खोज्छ। खण्ड यस पटक पूरा बज्छ। अगाडि + पछाडि ले यसलाई फेरि छोडिने गरी रिसेट गर्छ।";
+skipToastSectionTitle2 = "समर्थन / विरोध";
+skipToastSectionDeps2 = "👍 ले सर्भरमा तपाईंको भोट रेकर्ड गर्छ। 👎 ले विरुद्ध भोट दिन, स्थानीय रूपमा लुकाउन, वा कोटी परिवर्तन गर्न मेनु खोल्छ।";
+skipToastSectionTitle3 = "पूर्ण खण्ड मेनु";
+skipToastSectionDeps3 = "प्रगति बारमा खण्ड ट्याप गर्ने जस्तै विकल्पहरू।";
+managingSegmentsTitle = "खण्डहरू व्यवस्थापन गर्दै";
+managingSegmentsSectionTitle1 = "खण्डहरू व्यवस्थापन गर्नुहोस्…";
+managingSegmentsSectionDeps1 = "बार थिचेर राख्नुहोस् → 'खण्डहरू व्यवस्थापन गर्नुहोस्' ले हालको एपिसोडको प्रत्येक खण्ड सूचीबद्ध गर्छ। भोट दिनुहोस्, लुकाउनुहोस्, कोटी परिवर्तन गर्नुहोस्, वा प्लेयर जम्प गर्न पङ्क्ति ट्याप गर्नुहोस्।";
+managingSegmentsSectionTitle2 = "रिपोर्ट र मस्यौदाहरू";
+managingSegmentsSectionDeps2 = "सेटिङहरू → 'रिपोर्ट र मस्यौदाहरू' ले तपाईंका चलिरहेका मस्यौदाहरू (अधूरा चिन्हहरू) र लुकेका खण्डहरू राख्छ। मस्यौदाहरू सुरुवातहरूमा रहिरहन्छन्।";
+categoriesTitle = "कोटीहरू";
+categoriesSectionTitle1 = "कोटी अनुसार कार्यहरू";
+categoriesSectionDeps1 = "बन्द = बेवास्ता गर्नुहोस्। देखाउनुहोस् = बारमा मात्र कोर्नुहोस्। म्यानुअल = छोड्नु अघि सोध्नुहोस्। स्वतः = चुपचाप छोड्नुहोस्।";
+spicylyrics_api_key_placeholder = "Spicy क्लाइन्ट कुञ्जी प्रविष्ट गर्नुहोस्";
+lyrics_source_restart_popup = "नयाँ गीत स्रोत सबैतिर प्रयोग होस् भनेर Spotify पुनः सुरु गर्नुहोस्। तपाईंले पहिले नै बजाइसकेका गीतहरूले त्यसबेलासम्म आफ्ना पुराना गीतहरू राख्नेछन्।";
+restart_later = "पछि";
+manage_downloads = "डाउनलोडहरू व्यवस्थापन गर्नुहोस्";
+manage_downloads_subtitle = "Pixie अफलाइन डाउनलोडहरू";

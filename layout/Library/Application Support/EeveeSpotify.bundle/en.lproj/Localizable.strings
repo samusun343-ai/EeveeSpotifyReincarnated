@@ -142,6 +142,13 @@ liked_songs = "Liked songs";
 
 contributors = "Contributors";
 developer_note = "Developer's Note";
+retry = "Retry";
+app_icon_not_supported = "Alternate icons are not supported on this device.";
+developer_note_load_failed = "Failed to load developer note";
+developer_note_not_found = "No developer note found";
+contributors_load_failed = "Failed to load contributors";
+contributors_not_found = "No contributors found";
+artist_downloads = "Artist downloads";
 
 support_the_project = "Support the Project";
 support_the_project_description = "Fuel late-night code";

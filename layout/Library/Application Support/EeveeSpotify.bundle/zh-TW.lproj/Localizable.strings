@@ -46,6 +46,7 @@ Genius: 最佳、最多、最新的歌詞來源，但不具備同步歌詞。
 LRCLIB: 最開放的歌詞來源，並且提供同步歌詞，然而缺失大量歌曲。";
 lyrics_additional_info = "若 EeveeSpotify 無法提供歌詞，則您會看到「無法加載歌詞」提示（可隱藏）。以 Genius 為來源時可能會由於 EeveeSpotify 查找歌詞方式的問題而出現曲詞對應錯誤的問題，不過在大部分情況下可以正常運作。";
 petitlyrics_description = "PetitLyrics: 日本區 Spotify 預設歌詞來源，提供大量的已同步日文歌歌詞和部分外文歌歌詞。";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo：三階段來源。首先由 lrc.red 回應，提供快速的、經 CDN 快取的逐行與逐詞同步歌詞；如果它只有純文字或沒有某首歌的歌詞，接下來會詢問 LRCLIB，最後由聚合了 11 個提供者的 LiriQo 兜底，在可用時提供逐詞同步歌詞。";
 
 genius_fallback = "回退至 Genius";
 genius_fallback_description = "若 %@ 發生問題則回退至 Genius。";
@@ -57,6 +58,17 @@ hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏�
 
 romanized_lyrics = "羅馬化歌詞";
 romanized_lyrics_description = "羅馬化中、日、韓歌詞。";
+lyrics_offline_cache_section = "離線快取";
+lyrics_offline_cache = "離線快取歌詞";
+lyrics_offline_cache_description = "歌詞載入後會儲存在此裝置上，因此再次播放同一首歌時可立即顯示歌詞——即使沒有網路連線，也無需再次請求有速率限制的提供者。條目按歌詞來源分別保存，當快取超過 300 首歌或 16 MB 時，最舊的條目會被自動刪除。";
+lyrics_offline_cache_usage_label = "已快取的歌詞";
+lyrics_offline_cache_usage = "%d 首歌 · %@";
+lyrics_offline_cache_manage = "管理已快取的歌詞";
+lyrics_cache_title = "已快取的歌詞";
+lyrics_cache_empty = "尚無快取的歌詞。歌曲載入歌詞時會自動保存。";
+lyrics_cache_clear_all = "刪除所有已快取的歌詞";
+lyrics_cache_clear_confirm_title = "刪除所有已快取的歌詞？";
+lyrics_cache_clear_confirm_message = "每首歌下次播放時將重新下載。";
 
 // UI
 
@@ -96,6 +108,8 @@ have_premium_popup = "您看起來擁有可用的 Premium 訂閱，故 EeveeSpot
 high_audio_quality_popup = "極高音質為伺服器端控制，故 EeveeSpotify 無法啟用。";
 playlist_downloading_popup = "原生的歌曲下載功能為伺服器端控制，故 EeveeSpotify 無法啟用。不過您仍可下載播客和本機（區域網路）檔案。";
 download_local_playlist = "下載區域網路歌曲或播放清單";
+local_playlist_download_button = "顯示播放清單下載按鈕";
+local_playlist_download_setting_hint = "此播放清單按鈕僅透過 Wi-Fi 同步本機檔案。你可以在 EeveeSpotify 設定 → 雜項設定 → 顯示播放清單下載按鈕中將其隱藏。";
 
 //
 
@@ -189,6 +203,7 @@ action_auto = "自動";
 draftsTitle = "回報和草稿";
 errorNoPodcats = "尚未播放播客";
 markSegment = "為當前集數標記片段";
+markSegmentStartSet = "起點已設為 %@ 秒 · 再次開啟以設定終點";
 advancedTitle = "進階";
 howToUseTitle = "如何使用";
 creditsTitle = "致謝";
@@ -491,6 +506,9 @@ appearance_pages = "頁面";
 tab_bar_subtitle = "順序、啟動分頁、自定義分頁";
 lyrics_written_by = "作詞：";
 lyrics_provided_by = "歌詞提供方";
+lyrics_timing_offset_section = "歌詞時間偏移";
+lyrics_timing_offset_global = "所有曲目";
+lyrics_timing_offset_description = "將同步歌詞提前或延後顯示；正值表示延後顯示。單首曲目可在播放時從自訂歌詞檢視中校正。";
 karaoke_section = "自定義歌詞檢視";
 karaoke_section_footer = "反向會讓歌詞行從下到上流動，當前行位於螢幕靠下的位置。模糊強度用於控制非當前行的模糊程度。";
 karaoke_alignment = "歌詞對齊";
@@ -508,11 +526,21 @@ karaoke_word_synced_button = "自定義歌詞檢視";
 debug_logging = "除錯日誌";
 karaoke_enabled = "自定義歌詞檢視";
 karaoke_blur_intensity = "模糊強度";
+karaoke_lock_screen_line = "在鎖定畫面顯示目前行（實驗性）";
 
 /* MARK: Added to match en.lproj */
 
 developer_note = "開發者說明";
+retry = "重試";
+app_icon_not_supported = "此裝置不支援備用圖示。";
+developer_note_load_failed = "載入開發者備註失敗";
+developer_note_not_found = "找不到開發者備註";
+contributors_load_failed = "載入貢獻者失敗";
+contributors_not_found = "找不到貢獻者";
+artist_downloads = "藝人下載";
 spicylyrics_api_key_placeholder = "輸入 Spicy 用戶端金鑰";
 glass_lyrics_view = "自定義歌詞檢視";
 lyrics_source_restart_popup = "請重新啟動 Spotify，讓新的歌詞來源在所有位置生效。在此之前，已播放過的歌曲會保留舊歌詞。";
 restart_later = "稍後";
+manage_downloads = "管理下載";
+manage_downloads_subtitle = "Pixie 離線下載";

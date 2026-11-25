@@ -223,7 +223,7 @@ final class PlaylistActionRow: UIView {
         addSubview(actions)
         addSubview(playButton)
         artistDownloadButton.accessibilityIdentifier = "Eevee.Artist.Download"
-        artistDownloadButton.accessibilityLabel = "Artist downloads"
+        artistDownloadButton.accessibilityLabel = "artist_downloads".localized
         artistDownloadButton.isHidden = true
         actions.addSubview(artistDownloadButton)
         for (button, name) in [(shuffleButton,"Shuffle"),(addButton,"Add"),(shareButton,"Share"),(followButton,"Follow")] {

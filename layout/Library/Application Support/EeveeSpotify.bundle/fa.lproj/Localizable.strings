@@ -47,6 +47,7 @@ LRCLIB: آزادترین سرویس متن آهنگ که متن‌های همگ�
 lyrics_additional_info = "اگر EeveeSpotify نتواند آهنگی را پیدا کند یا متن آن را پردازش کند، پیام «متن این آهنگ بارگیری نشد» را مشاهده خواهید کرد. هنگام استفاده از Genius ممکن است متن برخی آهنگ‌ها به دلیل نحوه جستجوی آهنگ‌ها توسط توییک نادرست باشد، اما این مشکل در بیشتر موارد برطرف شده است.";
 spicylyrics_description = "SpicyLyrics متن آهنگ‌های کارائوکه را کلمه‌به‌کلمه ارائه می‌دهد. به‌طور پیش‌فرض از یک کلید داخلی استفاده می‌شود. اگر می‌خواهید از کلید خودتان استفاده کنید، به قالب Spicy ESR بروید و دکمه «Sign in» را بزنید. پس از ورود، شرایط خدمات (ToS) اسپایسی را بپذیرید و «Add ESR to my account» را بزنید. پس از افزوده شدن، کلید ساخته‌شده را کپی کنید، در بخش متن آهنگ Eevee جای‌گذاری کنید، سپس به Spicy برگردید و روی «I have stored it» کلیک کنید. بعد به صفحه برنامه‌ها بروید.";
 petitlyrics_description = "PetitLyrics: مجموعه بزرگی از متن‌های همگام با زمان برای آهنگ‌های ژاپنی و تعدادی از آهنگ‌های بین‌المللی را ارائه می‌دهد.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: منبعی سه‌مرحله‌ای. ابتدا lrc.red پاسخ می‌دهد و متن آهنگ همگام با خط و کلمه را سریع و از حافظهٔ نهان CDN ارائه می‌کند؛ اگر فقط متن ساده داشت یا برای آهنگی چیزی نداشت، بعدی LRCLIB پرسیده می‌شود و LiriQo — که ۱۱ ارائه‌دهنده را گرد هم می‌آورد — مرحلهٔ پایانی است، با متن همگام با کلمه در صورت موجود بودن.";
 
 genius_fallback = "جایگزین Genius";
 genius_fallback_description = "اگر در %@ مشکلی وجود داشته باشد، متن آهنگ از Genius بارگیری می‌شود.";
@@ -58,6 +59,17 @@ hide_lyrics_on_error_description = "اگر بارگیری متن آهنگ با �
 
 romanized_lyrics = "متن آوانویسی‌شده";
 romanized_lyrics_description = "نمایش متن آوانویسی‌شده برای آهنگ‌های ژاپنی، کره‌ای و چینی.";
+lyrics_offline_cache_section = "حافظهٔ نهان آفلاین";
+lyrics_offline_cache = "ذخیرهٔ متن آهنگ برای حالت آفلاین";
+lyrics_offline_cache_description = "متن آهنگ پس از بارگیری روی این دستگاه ذخیره می‌شود، بنابراین پخش دوبارهٔ یک آهنگ متنش را فوراً نشان می‌دهد — حتی بدون اتصال، و بدون پرسش دوباره از ارائه‌دهندگان دارای محدودیت نرخ. موارد بر اساس منبع متن آهنگ نگه داشته می‌شوند و وقتی حافظهٔ نهان از ۳۰۰ آهنگ یا ۱۶ مگابایت بیشتر شود، قدیمی‌ترین‌ها به‌طور خودکار حذف می‌شوند.";
+lyrics_offline_cache_usage_label = "متن‌های ذخیره‌شده";
+lyrics_offline_cache_usage = "%d آهنگ · %@";
+lyrics_offline_cache_manage = "مدیریت متن‌های ذخیره‌شده";
+lyrics_cache_title = "متن‌های ذخیره‌شده";
+lyrics_cache_empty = "هنوز متن ذخیره‌شده‌ای وجود ندارد. متن آهنگ به‌طور خودکار هنگام بارگیری توسط آهنگ ذخیره می‌شود.";
+lyrics_cache_clear_all = "حذف همهٔ متن‌های ذخیره‌شده";
+lyrics_cache_clear_confirm_title = "همهٔ متن‌های ذخیره‌شده حذف شوند؟";
+lyrics_cache_clear_confirm_message = "دفعهٔ بعدی که هر آهنگ پخش شود، دوباره دانلود خواهند شد.";
 
 karaoke_word_synced_button = "نمای سفارشی متن آهنگ";
 
@@ -99,6 +111,8 @@ have_premium_popup = "به نظر می‌رسد شما یک اشتراک Premium
 high_audio_quality_popup = "کیفیت صدای بسیار بالا (Very High) سمت سرور است و با این توییک در دسترس نیست.";
 playlist_downloading_popup = "دانلود بومی پلی‌لیست‌ها سمت سرور است و با این توییک امکان‌پذیر نیست. با این حال می‌توانید قسمت‌های پادکست را دانلود کنید.";
 download_local_playlist = "دانلود پلی‌لیست محلی";
+local_playlist_download_button = "نمایش دکمهٔ دانلود پلی‌لیست";
+local_playlist_download_setting_hint = "این دکمهٔ پلی‌لیست فقط فایل‌های محلی را از طریق Wi-Fi همگام می‌کند. می‌توانید آن را در تنظیمات EeveeSpotify ← متفرقه ← نمایش دکمهٔ دانلود پلی‌لیست پنهان کنید.";
 
 //
 
@@ -127,6 +141,13 @@ liked_songs = "آهنگ های لایک شده";
 
 contributors = "مشارکت کنندگان";
 developer_note = "یادداشت توسعه‌دهنده";
+retry = "تلاش دوباره";
+app_icon_not_supported = "آیکون‌های جایگزین در این دستگاه پشتیبانی نمی‌شوند.";
+developer_note_load_failed = "بارگیری یادداشت توسعه‌دهنده ناموفق بود";
+developer_note_not_found = "یادداشت توسعه‌دهنده‌ای یافت نشد";
+contributors_load_failed = "بارگیری مشارکت‌کنندگان ناموفق بود";
+contributors_not_found = "مشارکت‌کننده‌ای یافت نشد";
+artist_downloads = "دانلودهای هنرمند";
 
 support_the_project = "حمایت از پروژه";
 support_the_project_description = "تأمین مالی کدنویسی‌های شبانه";
@@ -196,6 +217,7 @@ action_auto = "خودکار";
 draftsTitle = "گزارش‌ها و پیش‌نویس‌ها";
 errorNoPodcats = "در حال حاضر هیچ پادکستی در حال پخش نیست.";
 markSegment = "علامت‌گذاری بخشی از قسمت فعلی";
+markSegmentStartSet = "شروع روی %@ ثانیه تنظیم شد · برای تنظیم پایان دوباره باز کنید";
 advancedTitle = "پیشرفته";
 howToUseTitle = "راهنمای استفاده";
 creditsTitle = "اعتبارات";
@@ -496,6 +518,9 @@ appearance_pages = "صفحه‌ها";
 tab_bar_subtitle = "ترتیب، تب اجرا، تب‌های سفارشی";
 lyrics_written_by = "نویسندگان:";
 lyrics_provided_by = "متن آهنگ ارائه‌شده توسط";
+lyrics_timing_offset_section = "زمان‌بندی متن آهنگ";
+lyrics_timing_offset_global = "همهٔ آهنگ‌ها";
+lyrics_timing_offset_description = "متن همگام را زودتر یا دیرتر نشان می‌دهد؛ مقادیر مثبت آن را دیرتر نشان می‌دهند. یک آهنگ را می‌توان هنگام پخش از نمای متن سفارشی اصلاح کرد.";
 karaoke_section = "نمای سفارشی متن آهنگ";
 karaoke_section_footer = "جهت معکوس باعث می‌شود خطوط از پایین به بالا جریان یابند و خط فعال پایین‌تر در صفحه قرار گیرد. شدت محوشدگی میزان محو بودن خطوط غیرفعال را تعیین می‌کند.";
 karaoke_alignment = "تراز متن آهنگ";
@@ -511,6 +536,9 @@ spicylyrics_template_link = "قالب Spicy ESR";
 debug_logging = "گزارش اشکال‌زدایی";
 karaoke_enabled = "نمای سفارشی متن آهنگ";
 karaoke_blur_intensity = "شدت محوشدگی";
+karaoke_lock_screen_line = "خط فعلی روی صفحهٔ قفل (آزمایشی)";
 glass_lyrics_view = "نمای شیشه‌ای متن آهنگ";
 lyrics_source_restart_popup = "برای استفاده از منبع جدید متن آهنگ در همه بخش‌ها، Spotify را مجدداً راه‌اندازی کنید. آهنگ‌هایی که قبلاً پخش شده‌اند تا آن زمان متن قبلی را حفظ می‌کنند.";
 restart_later = "بعداً";
+manage_downloads = "مدیریت دانلودها";
+manage_downloads_subtitle = "دانلودهای آفلاین Pixie";
