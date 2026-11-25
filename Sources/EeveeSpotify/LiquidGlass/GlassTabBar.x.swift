@@ -16,7 +16,13 @@ final class GlassSystemTabBar: UITabBar, UITabBarDelegate {
         switch sources[index] {
         case .stock(let source):
             CustomTabs.deselect()
-            if !EeveeFireTap(source) {
+            let stockViews = sources.compactMap { entry -> UIView? in
+                if case .stock(let view) = entry { return view } else { return nil }
+            }
+            let selected = stockViews.firstIndex(where: { $0 === source }).map {
+                GlassTabBar.selectStockTab(source, ordinal: $0, stockCount: stockViews.count)
+            } ?? false
+            if !selected, !EeveeFireTap(source) {
                 eeveeLog("[EeveeSpotify][Glass] Tab %d '%@' tap FAILED", index, item.title ?? "")
             }
         case .custom(let tab):
@@ -257,13 +263,40 @@ enum GlassTabBar {
         UserDefaults.knownTabs = titles
     }
 
+    // Selects a stock tab through Spotify's tab container instead of replaying the item's tap
+    // recognizer. The replay (EeveeFireTap) invokes the recognizer's action directly, with no
+    // real gesture cycle, on items that are hidden and interaction-disabled under the glass
+    // bar; on 9.2.2 that drives the container's selection machinery into installing a SwiftUI
+    // page's hosting controller into the page-context SPNavigationController without its
+    // page-controller wrapper, tripping the assertion at SPNavigationController.swift:488.
+    // The container's own selectedViewController setter — the terminal operation Spotify's
+    // machinery performs, fed with the container's own tabViewControllers — does not depend
+    // on gesture state. Returns false when no container with an unambiguous index mapping is
+    // found, so callers fall back to the legacy replay (older Spotify versions).
+    static func selectStockTab(_ source: UIView, ordinal: Int, stockCount: Int) -> Bool {
+        var responder: UIResponder? = source
+        while let current = responder {
+            if let container = current as? UIViewController,
+               container.responds(to: NSSelectorFromString("tabViewControllers")),
+               container.responds(to: NSSelectorFromString("setSelectedViewController:")),
+               let controllers = container.value(forKey: "tabViewControllers") as? [UIViewController],
+               controllers.count == stockCount, ordinal < controllers.count {
+                container.setValue(controllers[ordinal], forKey: "selectedViewController")
+                return true
+            }
+            responder = current.next
+        }
+        return false
+    }
+
     private static func applyLaunchTab(_ tabs: [UIView], title: (UIView) -> String?, label: (UIView) -> UILabel?) {
         guard !launchTabApplied, tabs.allSatisfy({ !(title($0) ?? "").isEmpty }) else { return }
         launchTabApplied = true
         guard let wanted = options.launchTab,
               let tab = tabs.first(where: { title($0) == wanted }),
               !isActive(tab, label: label(tab)) else { return }
-        let fired = EeveeFireTap(tab)
+        let ordinal = tabs.firstIndex(of: tab)
+        let fired = (ordinal.map { selectStockTab(tab, ordinal: $0, stockCount: tabs.count) } ?? false) || EeveeFireTap(tab)
         eeveeLog("[EeveeSpotify][Glass] Launch tab '%@' %@", wanted, fired ? "opened" : "FAILED")
     }
 
