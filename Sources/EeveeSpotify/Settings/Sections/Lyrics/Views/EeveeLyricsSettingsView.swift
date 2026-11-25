@@ -6,6 +6,9 @@ struct EeveeLyricsSettingsView: View {
     @State private var timingOffsets: LyricsTimingOffsets = UserDefaults.lyricsTimingOffsets
     @State var spicyLyricsApiKey: String = UserDefaults.spicyLyricsApiKey
     @State private var lyricsWidgetEnabled: Bool = UserDefaults.lyricsWidgetEnabled
+    @State var lyricsOfflineCacheEnabled: Bool = UserDefaults.lyricsOfflineCacheEnabled
+    @State var lyricsCacheUsageCount: Int = 0
+    @State var lyricsCacheUsageBytes: Int = 0
 
     var body: some View {
         List {
@@ -20,6 +23,7 @@ struct EeveeLyricsSettingsView: View {
                 romanizedLyricsSection()
                 lyricsTimingOffsetSection()
                 widgetSection()
+                offlineCacheSection()
                 
                 if viewModel.lyricsSource.supportsCustomLyricsView {
                     karaokeAppearanceSection()
@@ -35,6 +39,8 @@ struct EeveeLyricsSettingsView: View {
         .onChange(of: timingOffsets) { UserDefaults.lyricsTimingOffsets = $0 }
         .onChange(of: spicyLyricsApiKey) { UserDefaults.spicyLyricsApiKey = $0 }
         .onChange(of: lyricsWidgetEnabled) { UserDefaults.lyricsWidgetEnabled = $0 }
+        .onChange(of: lyricsOfflineCacheEnabled) { UserDefaults.lyricsOfflineCacheEnabled = $0 }
+        .onAppear { refreshLyricsCacheUsage() }
     }
 
     @ViewBuilder private func widgetSection() -> some View {
