@@ -63,6 +63,17 @@ final class LyricsOfflineCache {
     static let maxEntries = 300
     static let maxTotalBytes = 16 * 1024 * 1024
 
+    /// Entry format version written by `store` and required by `readEntry`.
+    /// Bumped to 2 to invalidate every entry written before the
+    /// metadata-attribution fix in CustomLyrics: the NowPlaying resolution
+    /// step could adopt the *playing* track's title/artist for a different
+    /// requested track ID, and those pairings were stored here. The
+    /// title/artist cross-check on read cannot catch them (both sides came
+    /// from the same wrong resolution), so the whole pre-fix generation is
+    /// dropped instead — a version mismatch deletes the file and the track
+    /// is simply refetched once.
+    private static let currentEntryVersion = 2
+
     /// "ELC1" — Eevee Lyrics Cache frame, version 1.
     private static let frameMagic: [UInt8] = [0x45, 0x4C, 0x43, 0x31]
     /// Sanity ceiling for a single decompressed payload (a JSON DTO is
@@ -130,7 +141,7 @@ final class LyricsOfflineCache {
               !dto.lines.isEmpty else { return }
 
         let entry = Entry(
-            version: 1,
+            version: Self.currentEntryVersion,
             trackId: query.spotifyTrackId,
             sourceRawValue: source.rawValue,
             title: query.title,
@@ -237,7 +248,7 @@ final class LyricsOfflineCache {
 
         guard let json = Self.decompress(frame),
               let entry = try? JSONDecoder().decode(Entry.self, from: json),
-              entry.version == 1 else {
+              entry.version == Self.currentEntryVersion else {
             try? fileManager.removeItem(at: url)
             return nil
         }

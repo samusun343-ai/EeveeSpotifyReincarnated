@@ -42,14 +42,22 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     var currentTitle: String? = nil
     var currentArtist: String? = nil
     var hasMetadata = false
+    // Which resolution step produced the metadata, and what the player
+    // observer last reported as the playing track. Both are recorded in the
+    // success log: a title/artist pair is only as trustworthy as the step
+    // that supplied it, and the misattribution fixed below was only visible
+    // in hindsight because neither was logged.
+    var metadataStep = "none"
+    let reportedTrackId = KaraokePlaybackTracker.shared.playerReportedTrackId()
 
-    let needsMetadata = source == .genius || source == .lrclib || source == .petit
+    let needsMetadata = source == .genius || source == .lrclib || source == .petit || source == .lrcRedLiriQo
 
     // 1. Use cached metadata if it's for the same track
     if let captured = capturedTrackMetadata(for: trackId) {
         currentTitle = captured.title
         currentArtist = captured.artist
         hasMetadata = true
+        metadataStep = "captured"
     }
 
     // 2. Try statefulPlayer (most reliable on modern Spotify)
@@ -62,6 +70,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
                 currentTitle = track.trackTitle()
                 currentArtist = track.artistName()
                 hasMetadata = true
+                metadataStep = "statefulPlayer"
                 storeCapturedTrackMetadata(trackId: trackId, title: currentTitle, artist: currentArtist)
             }
         }
@@ -70,7 +79,13 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     // 3. MPNowPlayingInfoCenter — must be read on the main thread.
     // It always describes the playing track, so it must not be used for another track
     // (Spotify also loads lyrics for tracks that aren't playing yet).
-    let nowPlayingIsThisTrack = KaraokePlaybackTracker.shared.playerReportedTrackId().map { $0 == trackId } ?? true
+    // Adoption therefore requires a *positive* ID match: the player observer
+    // must have reported this request's track as the playing one. Treating a
+    // missing report (nil) as a match filed the playing track's lyrics under
+    // whatever other track ID was being requested (and poisoned the capture
+    // and the offline cache with that pairing), so nil is now a non-match and
+    // resolution falls through to the ID-keyed Web API step instead.
+    let nowPlayingIsThisTrack = reportedTrackId == trackId
     if !hasMetadata && nowPlayingIsThisTrack {
         var npTitle: String? = nil
         var npArtist: String? = nil
@@ -87,6 +102,9 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             currentTitle = title
             currentArtist = artist
             hasMetadata = true
+            metadataStep = "nowPlaying"
+            // Only reached on a confirmed ID match (see the guard above), so
+            // this pairing is safe to promote into the capture.
             storeCapturedTrackMetadata(trackId: trackId, title: title, artist: artist)
         }
     }
@@ -97,12 +115,13 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             currentTitle = info.title
             currentArtist = info.artist
             hasMetadata = true
+            metadataStep = "webAPI"
             storeCapturedTrackMetadata(trackId: trackId, title: currentTitle, artist: currentArtist)
         }
     }
 
     if needsMetadata && !hasMetadata {
-        writeDebugLog("[Lyrics] \(trackId): no title/artist for \(source.description), cannot search")
+        writeDebugLog("[Lyrics] \(trackId): no title/artist for \(source.description), cannot search (reportedId=\(reportedTrackId ?? "nil"))")
         throw LyricsError.noSuchSong
     }
 
@@ -191,7 +210,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         $0.loadedSuccessfully = true
     }
 
-    writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced)")
+    writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced), metadata=\(metadataStep), reportedId=\(reportedTrackId ?? "nil")")
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
 
     // The user's timing correction applies to the native lyrics view only.
