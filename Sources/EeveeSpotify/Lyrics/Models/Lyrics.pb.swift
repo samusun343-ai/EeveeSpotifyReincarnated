@@ -92,6 +92,50 @@ enum LyricsSyncType: EeveeSwiftProtobuf.Enum {
 
 }
 
+/// Real `capStatus` of the ColorLyricsResponse Lyrics message (field 13).
+/// The field's type is spotify.lyricscapping.v1.CapStatus, determined
+/// statically from the Spotify 9.2.2 binary: the type's Swift field
+/// metadata lists the cases none / uncapped / reminder / capped in
+/// declaration order, which — by the same declaration-order numbering
+/// the syncType anchor confirmed behaviourally (unsynced=0,
+/// lineSynced=1, syllableSynced=2) — gives none=0, uncapped=1,
+/// reminder=2, capped=3. It records whether the lyrics are subject to
+/// Spotify's free-tier capping; the client's internal v3 lyrics model
+/// (Com_Spotify_Lyrics_V3_LyricsResponse) likewise stores this value.
+enum LyricsCapStatus: EeveeSwiftProtobuf.Enum {
+  typealias RawValue = Int
+  case none // = 0
+  case uncapped // = 1
+  case reminder // = 2
+  case capped // = 3
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .none
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .none
+    case 1: self = .uncapped
+    case 2: self = .reminder
+    case 3: self = .capped
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .none: return 0
+    case .uncapped: return 1
+    case .reminder: return 2
+    case .capped: return 3
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+}
+
 #if swift(>=4.2)
 
 extension LyricsRestriction: CaseIterable {
@@ -200,13 +244,22 @@ struct LyricsData {
   /// Real schema field 5: `providerDisplayName`.
   var providedBy: String = String()
 
-  var restriction: LyricsRestriction = .unrestricted
-
   /// Real schema field 9: `alternatives` (repeated LyricsAlternative).
   var alternatives: [LyricsAlternative] = []
 
   /// Real schema field 10: `language`.
   var language: String = String()
+
+  /// Real schema field 13: `capStatus` (see LyricsCapStatus).
+  var capStatus: LyricsCapStatus = .none
+
+  /// Real schema field 14: `previewLines` (repeated LyricsLine) — the
+  /// short preview of the lyrics the client shows on the NPV lyrics
+  /// card. This slot was previously modelled as a `restriction` enum;
+  /// that was a guess from the pre-9.2.2 schema reconstruction and the
+  /// value Eevee wrote was always the proto3 default (never on the
+  /// wire), so replacing it changes no emitted bytes.
+  var previewLines: [LyricsLine] = []
 
   var unknownFields = EeveeSwiftProtobuf.UnknownStorage()
 
@@ -247,6 +300,7 @@ struct Lyrics {
 #if swift(>=5.5) && canImport(_Concurrency)
 extension LyricsRestriction: @unchecked Sendable {}
 extension LyricsSyncType: @unchecked Sendable {}
+extension LyricsCapStatus: @unchecked Sendable {}
 extension LyricsLine: @unchecked Sendable {}
 extension LyricsColors: @unchecked Sendable {}
 extension LyricsTranslation: @unchecked Sendable {}
@@ -271,6 +325,15 @@ extension LyricsSyncType: EeveeSwiftProtobuf._ProtoNameProviding {
     0: .same(proto: "UNSYNCED"),
     1: .same(proto: "LINE_SYNCED"),
     2: .same(proto: "SYLLABLE_SYNCED"),
+  ]
+}
+
+extension LyricsCapStatus: EeveeSwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap: EeveeSwiftProtobuf._NameMap = [
+    0: .same(proto: "NONE"),
+    1: .same(proto: "UNCAPPED"),
+    2: .same(proto: "REMINDER"),
+    3: .same(proto: "CAPPED"),
   ]
 }
 
@@ -452,9 +515,10 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     3: .same(proto: "provider"),
     4: .same(proto: "providerLyricsID"),
     5: .same(proto: "providedBy"),
-    14: .same(proto: "restriction"),
     9: .same(proto: "alternatives"),
     10: .same(proto: "language"),
+    13: .same(proto: "capStatus"),
+    14: .same(proto: "previewLines"),
   ]
 
   mutating func decodeMessage<D: EeveeSwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -470,7 +534,8 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
       case 5: try { try decoder.decodeSingularStringField(value: &self.providedBy) }()
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.alternatives) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.language) }()
-      case 14: try { try decoder.decodeSingularEnumField(value: &self.restriction) }()
+      case 13: try { try decoder.decodeSingularEnumField(value: &self.capStatus) }()
+      case 14: try { try decoder.decodeRepeatedMessageField(value: &self.previewLines) }()
       default: break
       }
     }
@@ -502,8 +567,11 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     if !self.language.isEmpty {
       try visitor.visitSingularStringField(value: self.language, fieldNumber: 10)
     }
-    if self.restriction != .unrestricted {
-      try visitor.visitSingularEnumField(value: self.restriction, fieldNumber: 14)
+    if self.capStatus != .none {
+      try visitor.visitSingularEnumField(value: self.capStatus, fieldNumber: 13)
+    }
+    if !self.previewLines.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.previewLines, fieldNumber: 14)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -514,9 +582,10 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     if lhs.provider != rhs.provider {return false}
     if lhs.providerLyricsID != rhs.providerLyricsID {return false}
     if lhs.providedBy != rhs.providedBy {return false}
-    if lhs.restriction != rhs.restriction {return false}
     if lhs.alternatives != rhs.alternatives {return false}
     if lhs.language != rhs.language {return false}
+    if lhs.capStatus != rhs.capStatus {return false}
+    if lhs.previewLines != rhs.previewLines {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

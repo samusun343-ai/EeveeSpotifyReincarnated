@@ -40,7 +40,31 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
     modifyAssignedValues(&configuration.assignedValues)
 }
 
+// Lyrics native block gate (9.2.2, statically determined): every native
+// lyrics surface in Now Playing — the scroll provider
+// (Lyrics_NPVCommunicatorImpl.LyricsScrollDataProvider) and the lyrics
+// card element (Lyrics_CardElementImpl) — is fed by
+// Lyrics_RepositoryImpl, whose fetch first runs a metadata check and
+// fails with LyricsRepositoryError.metadataCheckFailed when the track's
+// server-side metadata says it has no lyrics. That check reads metadata
+// Eevee cannot patch (the v4 SPTPlayerTrack has_lyrics injection only
+// feeds the fullscreen page's own request), which is why tracks without
+// official lyrics got lyrics in the page but never the native block.
+// The ios-feature-lyrics property set the repository itself reads —
+// its own fields mirror enable_common_capping, is_get_lyrics_v2_enabled,
+// lyrics_offline_enabled and enable_v2_extended_metadata_colors from
+// the same set — declares enable_has_lyrics_check_bypass for exactly
+// this check. Forcing it on lets the repository fetch anyway; Eevee's
+// /color-lyrics/v2 substitution then serves the lyrics.
+private let lyricsHasLyricsCheckBypass = EeveePropertyReplacement(
+    name: "enable_has_lyrics_check_bypass",
+    scope: "ios-feature-lyrics",
+    modification: .forceBool(true)
+)
+
 private let propertyReplacements = [
+    lyricsHasLyricsCheckBypass,
+
     // Append when the account's config omits them, so they work without overwrite-configuration.
     EeveePropertyReplacement(name: "crossfade_enabled", scope: "ios-feature-settings", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "automix_enabled", scope: "ios-feature-settings", modification: .forceBool(true)),
@@ -413,15 +437,17 @@ private func modifyAssignedValues(_ values: inout [AssignedValue]) {
 
 /// Rewrites 9.2's remote configuration (remote-config-resolver/v3/configuration),
 /// a serialized `ResolveResponse`. On 9.2 it replaces the bootstrap and customize
-/// responses modifyRemoteConfiguration rewrites, so none of propertyReplacements
-/// reach it; only the crossfade replacements are applied here so far. Returns nil
+/// responses modifyRemoteConfiguration rewrites, so the full propertyReplacements
+/// list does not reach it; only the crossfade replacements and the lyrics
+/// has_lyrics check bypass (which gates the native NPV lyrics block — see
+/// lyricsHasLyricsCheckBypass) are applied here. Returns nil
 /// when the bytes are not that proto or nothing changed, so the caller leaves the
 /// response untouched.
 func rewriteRemoteConfigurationData(_ data: Data) -> Data? {
     guard var response = try? ResolveResponse(serializedBytes: data),
           !response.configuration.assignedValues.isEmpty else { return nil }
 
-    let replacements = EeveeCrossfade.replacements
+    let replacements = EeveeCrossfade.replacements + [lyricsHasLyricsCheckBypass]
     func summary() -> String {
         replacements.compactMap { replacement in
             guard let scope = replacement.scope, let name = replacement.name else { return nil }

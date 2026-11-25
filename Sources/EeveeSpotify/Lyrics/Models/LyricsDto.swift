@@ -32,7 +32,13 @@ struct LyricsDto {
             // Real response schema field 1 is a 3-value syncType enum;
             // .lineSynced (1) encodes exactly like the old Bool `true`.
             $0.syncType = timeSynced ? .lineSynced : .unsynced
-            $0.restriction = .unrestricted
+            // Eevee serves complete lyrics, never a capped preview, so
+            // the truthful cap status is .uncapped. The client's
+            // internal v3 lyrics model likewise stores a capStatus, and
+            // the NPV lyrics surfaces are fed from that model — leaving
+            // it at the .none default reports Eevee-served lyrics as of
+            // unknown capping state.
+            $0.capStatus = .uncapped
             $0.provider = providerCredit ?? source
             $0.providedBy = "\(providerCredit ?? source) (EeveeSpotify)"
         }
@@ -82,6 +88,15 @@ struct LyricsDto {
             }
         }
         
+        if !lines.isEmpty {
+            // Real schema field 14 is `previewLines`: the short preview
+            // the NPV lyrics card shows (the card element has dedicated
+            // snippet states). Official responses carry the opening
+            // lines there; mirror that with the first lines of the
+            // lyrics actually served above.
+            lyricsData.previewLines = Array(lyricsData.lines.prefix(4))
+        }
+
         if let translation = translation {
             // Real schema field 9 is `alternatives` (repeated): the
             // client reads a translation as an alternative-language
