@@ -30,8 +30,6 @@ func exitApplication() {
 struct PremiumBootstrapGroup: HookGroup { }
 struct PremiumUIHooksGroup: HookGroup { }
 
-struct BasePremiumPatchingGroup: HookGroup { }
-
 struct IOS14PremiumPatchingGroup: HookGroup { }
 struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
@@ -50,8 +48,6 @@ func activateV91ServerSidedReminderIfAvailable() {
 }
 
 func activatePremiumPatchingGroup() {
-    BasePremiumPatchingGroup().activate()
-    
     if EeveeSpotify.hookTarget == .lastAvailableiOS14 {
         IOS14PremiumPatchingGroup().activate()
     }

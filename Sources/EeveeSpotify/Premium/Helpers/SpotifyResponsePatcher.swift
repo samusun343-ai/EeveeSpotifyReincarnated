@@ -76,7 +76,11 @@ enum SpotifyResponsePatcher {
     }
 
     static func shouldModify(_ url: URL) -> Bool {
-        let shouldPatchPremium = BasePremiumPatchingGroup.isActive || PremiumBootstrapGroup.isActive
+        // Both callers (SPTDataLoaderServiceHook, HttpClientURLSessionHook)
+        // belong to PremiumBootstrapGroup, so this is only ever reached
+        // while that group is active. The empty BasePremiumPatchingGroup
+        // disjunct that used to sit here could never change the outcome.
+        let shouldPatchPremium = PremiumBootstrapGroup.isActive
         let shouldReplaceLyrics = BaseLyricsGroup.isActive
         let isDAC = url.path.lowercased().contains("/dac/view/v1/")
 

@@ -145,7 +145,6 @@ private let adClassesToDump: [String] = [
     "_TtC29AdsNowPlaying_InStreamAdsImpl18InStreamAdsService",
     "_TtC20NativeAds_LoggerImpl26NativeAdsLoggerServiceImpl",
     "_TtC21NativeAds_ElementImpl27NativeAdsElementServiceImpl",
-    "_TtC28AdsPlatform_AdsBaseSwiftImpl19AdSlotRegistrarImpl",
     "_TtC48AdsEmbedded_AdsSponsoredContextNPBAttachmentImpl25AdModelChangedEventSource",
     "_TtC16Home_EvoPageImpl27SectionProviderRegistryImpl",
     "_TtC16Home_EvoPageImpl24AdPreviewSectionProvider",
@@ -174,7 +173,6 @@ private let shuffleClassesToDump: [String] = [
     "SmartShuffle_CoreImpl.SmartShuffleStateReactiveValue",
     "SmartShuffle_CoreImpl.SmartShuffleHandlerObserverWrapper",
     "Queue_ViewImpl.QueueTrackShuffledList",
-    "ListUXPlatform_PlaylistTrackCloudImpl.LikedTrackCloudShuffle",
 ]
 
 private let sbClassesToDump: [String] = [
@@ -269,7 +267,6 @@ private func dumpClassesOnce() {
             ".ShuffledListEffectHandler",
             ".ReshuffleEffectHandler",
             ".QueueTrackShuffledList",
-            ".LikedTrackCloudShuffle",
             ".SmartShufflePlayerAdapter",
             ".SmartShuffleInteropImpl",
             ".ShuffleControllerImpl",
