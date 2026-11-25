@@ -350,6 +350,17 @@ struct EeveeSpotify: Tweak {
                     writeDebugLog("[INIT] Skipped V91LyricsGroup (NPVScrollViewController missing)")
                 }
 
+                // Force has_lyrics in track metadata so the client also
+                // requests lyrics for tracks Spotify has none for — without
+                // the request there is nothing for the hooks above to
+                // replace. Inside the lyricsEnabled gate, so the default
+                // (notReplaced) source leaves track metadata untouched.
+                if NSClassFromString("SPTPlayerTrack") != nil {
+                    LyricsAvailabilityGroup().activate()
+                } else {
+                    writeDebugLog("[INIT] Skipped LyricsAvailabilityGroup (SPTPlayerTrack missing)")
+                }
+
             }
 
             if let cls = NSClassFromString("ProfileSettingsSection"),

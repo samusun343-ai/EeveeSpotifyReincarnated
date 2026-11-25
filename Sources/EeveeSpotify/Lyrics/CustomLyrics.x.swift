@@ -8,6 +8,7 @@ struct LegacyLyricsGroup: HookGroup { }
 struct ModernLyricsGroup: HookGroup { }
 struct V91LyricsGroup: HookGroup { }            // 9.1.x-safe subset
 struct LyricsErrorHandlingGroup: HookGroup { }  // not activated on 9.1.x
+struct LyricsAvailabilityGroup: HookGroup { }   // 9.1.x+: has_lyrics forcing only (CustomLyrics+AllTracksLyrics)
 
 var lyricsState = LyricsLoadingState()
 

@@ -3,6 +3,29 @@ import UIKit
 
 private var shouldOverrideLocalTrackURI = false
 
+// 9.1.x+ counterpart of SPTPlayerTrackHook's metadata() forcing, below.
+// The original hook sits in LyricsErrorHandlingGroup, which the 9.1.x init
+// path never activates — so on current Spotify the has_lyrics injection
+// never happened, and for tracks without official lyrics the client never
+// issued the /color-lyrics/v2 request Eevee replaces. The target is
+// verified present in the 9.2.2 binary: SPTPlayerTrack is in the ObjC
+// class list and implements metadata()/setMetadata:/URI, and "has_lyrics"
+// appears among its track metadata keys. Only metadata() is hooked here:
+// the original's URI() behavior (local-track override + prefetch trigger)
+// stays legacy-only, as 9.1.x has its own prefetch path and the override
+// was never active there. Activated from the 9.1.x init path only when a
+// custom lyrics source is selected (lyricsSource.isReplacingLyrics).
+class SPTPlayerTrackAvailabilityHook: ClassHook<NSObject> {
+    typealias Group = LyricsAvailabilityGroup
+    static let targetName = "SPTPlayerTrack"
+
+    func metadata() -> [String: String] {
+        var meta = orig.metadata()
+        meta["has_lyrics"] = "true"
+        return meta
+    }
+}
+
 // SPTPlayerTrack metadata hooks not compatible with 9.1.x
 class SPTPlayerTrackHook: ClassHook<NSObject> {
     typealias Group = LyricsErrorHandlingGroup  // Not activated for 9.1.x
