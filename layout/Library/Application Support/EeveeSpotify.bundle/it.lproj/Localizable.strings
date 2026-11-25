@@ -240,7 +240,7 @@ markSegmentStartSet = "Inizio impostato a %@s · apri di nuovo per impostare la 
 
 // SponsorBlock Reset Options Advanced
 "resetTitle" = "Cosa vuoi ripristinare?";
-"resetSubtitle" = "Ogni opzione è indipendente dalle altre.";
+"sponsorblock_reset_subtitle" = "Ogni opzione è indipendente dalle altre.";
 "allResetSB" = "Tutto (tutte le voci precedenti)";
 "regenerateIDSB" = "Rigenera ID utente";
 "localSubmissionsSB" = "I miei invii locali (%@)";

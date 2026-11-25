@@ -262,7 +262,7 @@ resetButtonTrackLog = "Resetuj…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "Co zresetować?";
-resetSubtitle = "Każda opcja jest niezależna.";
+sponsorblock_reset_subtitle = "Każda opcja jest niezależna.";
 allResetSB = "Wszystko (wszystkie powyższe)";
 regenerateIDSB = "Wygeneruj ponownie identyfikator użytkownika";
 localSubmissionsSB = "Moje lokalne zgłoszenia (%@)";

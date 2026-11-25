@@ -243,7 +243,7 @@ resetButtonTrackLog = "إعادة ضبط";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "عايز تعيد ضبط إيه؟";
-resetSubtitle = "كل حاجة لوحدها";
+sponsorblock_reset_subtitle = "كل حاجة لوحدها";
 allResetSB = "الكل";
 regenerateIDSB = "توليد الهوية من جديد";
 localSubmissionsSB = "مشاركاتي المحلية (%@)";

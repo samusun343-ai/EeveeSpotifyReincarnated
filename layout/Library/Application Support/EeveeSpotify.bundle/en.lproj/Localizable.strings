@@ -268,7 +268,7 @@ resetButtonTrackLog = "Reset…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "Reset what?";
-resetSubtitle = "Each is independent.";
+sponsorblock_reset_subtitle = "Each is independent.";
 allResetSB = "Everything (all of the above)";
 regenerateIDSB = "Regenerate user ID";
 localSubmissionsSB = "My local submissions (%@)";

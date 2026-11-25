@@ -267,7 +267,7 @@ resetButtonTrackLog = "Sıfırla…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "Ne sıfırlansın?";
-resetSubtitle = "Her biri bağımsızdır.";
+sponsorblock_reset_subtitle = "Her biri bağımsızdır.";
 allResetSB = "Her şey (yukarıdakilerin tümü)";
 regenerateIDSB = "Kullanıcı kimliğini yeniden üret";
 localSubmissionsSB = "Yerel gönderilerim (%@)";

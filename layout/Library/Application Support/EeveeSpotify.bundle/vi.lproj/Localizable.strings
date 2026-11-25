@@ -243,7 +243,7 @@ resetButtonTrackLog = "Đặt lại…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "Đặt lại những gì?";
-resetSubtitle = "Mỗi mục là độc lập.";
+sponsorblock_reset_subtitle = "Mỗi mục là độc lập.";
 allResetSB = "Mọi thứ (tất cả các mục trên)";
 regenerateIDSB = "Tạo lại ID người dùng";
 localSubmissionsSB = "Các đóng góp cục bộ của tớ (%@)";

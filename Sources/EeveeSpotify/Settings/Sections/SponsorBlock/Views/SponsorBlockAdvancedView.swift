@@ -74,7 +74,7 @@ struct SponsorBlockAdvancedView: View {
 
         return ActionSheet(
             title: Text("resetTitle".localized),
-            message: Text("resetSubtitle".localized),
+            message: Text("sponsorblock_reset_subtitle".localized),
             buttons: [
                 .destructive(Text("settingsResetSB".localized)) {
                     options = SponsorBlockOptions(

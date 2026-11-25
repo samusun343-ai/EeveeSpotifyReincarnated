@@ -253,7 +253,7 @@ resetButtonTrackLog = "重置";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "重置什麼？";
-resetSubtitle = "每項獨立";
+sponsorblock_reset_subtitle = "每項獨立";
 allResetSB = "全部";
 regenerateIDSB = "重新產生身份";
 localSubmissionsSB = "我的本機提交（%@）";

@@ -267,7 +267,7 @@ resetButtonTrackLog = "بازنشانی…";
 
 // SponsorBlock Reset Options Advanced
 resetTitle = "چه چیزی بازنشانی شود؟";
-resetSubtitle = "هر مورد مستقل از دیگری است.";
+sponsorblock_reset_subtitle = "هر مورد مستقل از دیگری است.";
 allResetSB = "همه موارد (تمام گزینه‌های بالا)";
 regenerateIDSB = "ایجاد مجدد شناسه کاربری";
 localSubmissionsSB = "ارسال‌های محلی من (%@)";
