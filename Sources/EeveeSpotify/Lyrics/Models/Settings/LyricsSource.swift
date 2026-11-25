@@ -20,7 +20,7 @@ enum LyricsSource: Int, CaseIterable, CustomStringConvertible {
         case .petit:        return "PetitLyrics"
         case .notReplaced:  return "Spotify"
         case .spicylyrics:  return "SpicyLyrics"
-        case .lrcRedLiriQo: return "lrc.red + LiriQo"
+        case .lrcRedLiriQo: return "lrc.red + LRCLIB + LiriQo"
         }
     }
 
