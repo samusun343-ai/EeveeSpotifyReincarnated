@@ -42,10 +42,13 @@ UIImage *EeveeEncoreIconImage(UIView *live, BOOL active) {
     return EeveeRenderTemplate(view);
 }
 
-// Spotify's tab items answer a tap recognizer, so replay its target-action pairs like a real touch would.
-// A control is pressed through the actions registered on it, which is what UIKit runs after a real touch. The tap
-// recognizer a button carries belongs to the system's own machinery (pointer, focus, menus); replaying it never
-// reaches those actions.
+// A control is pressed through the actions registered on it, which is what UIKit runs after a real touch.
+// Gesture recognizers are never replayed: invoking a recognizer's target-action pairs directly, with no
+// gesture state cycle, drives the target's machinery in states real input never produces. Replaying a
+// Spotify tab item's tap recognizer ran the tab container's interaction-event fan-out and installed a
+// SwiftUI page's bare hosting controller into SPNavigationController, tripping its page-controller
+// assertion (SPNavigationController.swift:488). The tap recognizer a button carries also belongs to the
+// system's own machinery (pointer, focus, menus); replaying it never reaches the control's actions.
 static BOOL EeveePressControl(UIControl *control) {
     UIControlEvents registered = control.allControlEvents;
     if (!control.enabled || !(registered & (UIControlEventTouchUpInside | UIControlEventPrimaryActionTriggered))) return NO;
@@ -53,34 +56,22 @@ static BOOL EeveePressControl(UIControl *control) {
     return YES;
 }
 
+// Presses the first UIControl in the view's subtree through its registered actions.
+// Despite the name this no longer synthesizes taps: tab selection does not use it at
+// all (GlassTabBar selects through the container's selectedViewController setter),
+// and the remaining callers forward presses to stock controls, which are UIControls.
+// Returns NO when the subtree contains no control.
 BOOL EeveeFireTap(UIView *root) {
     if ([root isKindOfClass:UIControl.class]) {
         [(UIControl *)root sendActionsForControlEvents:UIControlEventTouchUpInside | UIControlEventPrimaryActionTriggered];
         return YES;
     }
-    Ivar targetsIvar = class_getInstanceVariable(UIGestureRecognizer.class, "_targets");
-    if (!targetsIvar) return NO;
     NSMutableArray<UIView *> *queue = [NSMutableArray arrayWithObject:root];
     while (queue.count) {
         UIView *view = queue.firstObject;
         [queue removeObjectAtIndex:0];
         [queue addObjectsFromArray:view.subviews];
         if ([view isKindOfClass:UIControl.class] && EeveePressControl((UIControl *)view)) return YES;
-        for (UIGestureRecognizer *recognizer in view.gestureRecognizers) {
-            if (![recognizer isKindOfClass:UITapGestureRecognizer.class] || !recognizer.enabled) continue;
-            BOOL fired = NO;
-            for (id pair in object_getIvar(recognizer, targetsIvar)) {
-                Ivar targetIvar = class_getInstanceVariable([pair class], "_target");
-                Ivar actionIvar = class_getInstanceVariable([pair class], "_action");
-                if (!targetIvar || !actionIvar) continue;
-                id target = object_getIvar(pair, targetIvar);
-                SEL action = *(SEL *)((char *)(__bridge void *)pair + ivar_getOffset(actionIvar));
-                if (!target || !action || ![target respondsToSelector:action]) continue;
-                ((void (*)(id, SEL, id))objc_msgSend)(target, action, recognizer);
-                fired = YES;
-            }
-            if (fired) return YES;
-        }
         if ([view isKindOfClass:UIControl.class] && view != root) {
             [(UIControl *)view sendActionsForControlEvents:UIControlEventTouchUpInside];
             return YES;

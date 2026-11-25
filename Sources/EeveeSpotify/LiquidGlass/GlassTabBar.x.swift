@@ -22,7 +22,7 @@ final class GlassSystemTabBar: UITabBar, UITabBarDelegate {
             let selected = stockViews.firstIndex(where: { $0 === source }).map {
                 GlassTabBar.selectStockTab(source, ordinal: $0, stockCount: stockViews.count)
             } ?? false
-            if !selected, !EeveeFireTap(source) {
+            if !selected {
                 eeveeLog("[EeveeSpotify][Glass] Tab %d '%@' tap FAILED", index, item.title ?? "")
             }
         case .custom(let tab):
@@ -263,30 +263,71 @@ enum GlassTabBar {
         UserDefaults.knownTabs = titles
     }
 
-    // Selects a stock tab through Spotify's tab container instead of replaying the item's tap
-    // recognizer. The replay (EeveeFireTap) invokes the recognizer's action directly, with no
-    // real gesture cycle, on items that are hidden and interaction-disabled under the glass
-    // bar; on 9.2.2 that drives the container's selection machinery into installing a SwiftUI
-    // page's hosting controller into the page-context SPNavigationController without its
-    // page-controller wrapper, tripping the assertion at SPNavigationController.swift:488.
-    // The container's own selectedViewController setter — the terminal operation Spotify's
-    // machinery performs, fed with the container's own tabViewControllers — does not depend
-    // on gesture state. Returns false when no container with an unambiguous index mapping is
-    // found, so callers fall back to the legacy replay (older Spotify versions).
+    // Selects a stock tab through Spotify's tab container. There is no gesture-replay
+    // fallback anymore. Replaying the item's tap recognizer (the old EeveeFireTap path)
+    // invokes TabBarItemElementUI.handleTap out of band, with no real gesture cycle, on
+    // items that are hidden and interaction-disabled under the glass bar; the container's
+    // didSelect handler fans the interaction out through SPTTabBarLogger to the page
+    // coordinator before selecting anything, and that presentation path installs a
+    // SwiftUI page's bare UIHostingController into the page-context
+    // SPNavigationController, tripping the assertion at SPNavigationController.swift:488
+    // (frame-verified against the 9.2.2 binary). The container's selectedViewController
+    // setter, by contrast, is the same internal containment swap Spotify's own
+    // programmatic selection funnels through — it never touches the event fan-out.
+    //
+    // The ordinal mapping is only trusted when the container's tabViewControllers count
+    // matches the number of visible stock tab views exactly: the getter builds that
+    // array from the container's index-keyed tab dictionary and skips tabs whose view
+    // controller has not been materialized yet, so with unvisited tabs the array is
+    // compacted and an ordinal could point at the wrong controller. When the counts
+    // differ, the one remaining unambiguous case — re-selecting the already-active
+    // tab — succeeds as a no-op; anything else returns false and logs the counts
+    // rather than guessing. A tab with no materialized view controller cannot be
+    // selected directly at all: there is no object to assign, and Spotify's own
+    // select-by-index silently returns for such an index.
     static func selectStockTab(_ source: UIView, ordinal: Int, stockCount: Int) -> Bool {
-        var responder: UIResponder? = source
-        while let current = responder {
-            if let container = current as? UIViewController,
-               container.responds(to: NSSelectorFromString("tabViewControllers")),
-               container.responds(to: NSSelectorFromString("setSelectedViewController:")),
-               let controllers = container.value(forKey: "tabViewControllers") as? [UIViewController],
-               controllers.count == stockCount, ordinal < controllers.count {
-                container.setValue(controllers[ordinal], forKey: "selectedViewController")
-                return true
+        // Walk the responder chains of the tapped view and of the stock bar (they
+        // normally converge). A candidate whose controller count matches exactly
+        // wins immediately; otherwise remember the first candidate for the log.
+        var fallbackCount: Int?
+        for start in [source, stock].compactMap({ $0 }) {
+            var responder: UIResponder? = start
+            while let current = responder {
+                if let container = current as? UIViewController,
+                   container.responds(to: NSSelectorFromString("setSelectedViewController:")),
+                   let controllers = tabControllers(of: container) {
+                    if controllers.count == stockCount, ordinal < controllers.count {
+                        container.setValue(controllers[ordinal], forKey: "selectedViewController")
+                        return true
+                    }
+                    if fallbackCount == nil { fallbackCount = controllers.count }
+                }
+                responder = current.next
             }
-            responder = current.next
+        }
+        if isActive(source, label: label(in: source)) {
+            return true
+        }
+        if let fallbackCount {
+            eeveeLog(
+                "[EeveeSpotify][Glass] selectStockTab: %d controllers for %d stock tabs; ordinal %d not mappable",
+                fallbackCount, stockCount, ordinal
+            )
+        } else {
+            eeveeLog("[EeveeSpotify][Glass] selectStockTab: no tab container for ordinal %d/%d", ordinal, stockCount)
         }
         return false
+    }
+
+    private static func tabControllers(of container: UIViewController) -> [UIViewController]? {
+        for key in ["tabViewControllers", "viewControllers"] {
+            if container.responds(to: NSSelectorFromString(key)),
+               let controllers = container.value(forKey: key) as? [UIViewController],
+               !controllers.isEmpty {
+                return controllers
+            }
+        }
+        return nil
     }
 
     private static func applyLaunchTab(_ tabs: [UIView], title: (UIView) -> String?, label: (UIView) -> UILabel?) {
@@ -296,7 +337,7 @@ enum GlassTabBar {
               let tab = tabs.first(where: { title($0) == wanted }),
               !isActive(tab, label: label(tab)) else { return }
         let ordinal = tabs.firstIndex(of: tab)
-        let fired = (ordinal.map { selectStockTab(tab, ordinal: $0, stockCount: tabs.count) } ?? false) || EeveeFireTap(tab)
+        let fired = ordinal.map { selectStockTab(tab, ordinal: $0, stockCount: tabs.count) } ?? false
         eeveeLog("[EeveeSpotify][Glass] Launch tab '%@' %@", wanted, fired ? "opened" : "FAILED")
     }
 
