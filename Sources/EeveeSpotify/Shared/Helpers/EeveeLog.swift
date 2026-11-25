@@ -16,8 +16,15 @@ enum EeveeLog {
     }()
 
     static func write(_ line: String) {
-        NSLog("%@", line)
+        // Both sinks are gated on the debug-logging setting (audit M1):
+        // the NSLog used to fire unconditionally, so every eeveeLog /
+        // writeDebugLog call site — launch, response patching, auth
+        // request tracing — wrote to the system log even with debug
+        // logging off. The troubleshooting flow is unchanged: enable
+        // debug logging, reproduce, and both the console and the
+        // exportable file receive the lines.
         guard UserDefaults.debugLoggingEnabled else { return }
+        NSLog("%@", line)
         let date = Date()
         queue.async { append("\(stamp.string(from: date)) \(line)\n") }
     }

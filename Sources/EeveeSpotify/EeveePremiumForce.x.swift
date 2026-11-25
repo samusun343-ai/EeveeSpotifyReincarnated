@@ -157,6 +157,12 @@ private func passiveLogProductState(_ tag: String, _ dict: NSDictionary) {
     if dict["ads"] as? String == "1" {
         writeDebugLog("[ORACLE][ENTITLEMENT_DRIFT] SPTCoreProductState reported ads=1 in \(tag)")
     }
+    // The [REVERT_WATCH] dump below is pure debug output (audit M2):
+    // it used to NSLog premium key=value pairs on every product-state
+    // update, always on, with no opt-out. Tie it to the debug-logging
+    // setting like the rest of the tweak's diagnostics. The drift
+    // signal above stays on the EeveeLog path and is unaffected.
+    guard UserDefaults.debugLoggingEnabled else { return }
     var pairs: [String] = []
     for k in premiumWatchKeys {
         if let v = dict[k] { pairs.append("\(k)=\(v)") }
