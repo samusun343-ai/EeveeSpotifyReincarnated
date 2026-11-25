@@ -19,9 +19,9 @@ final class GlassSystemTabBar: UITabBar, UITabBarDelegate {
             let stockViews = sources.compactMap { entry -> UIView? in
                 if case .stock(let view) = entry { return view } else { return nil }
             }
-            let selected = stockViews.firstIndex(where: { $0 === source }).map {
-                GlassTabBar.selectStockTab(source, ordinal: $0, stockCount: stockViews.count)
-            } ?? false
+            let selected = stockViews.contains(where: { $0 === source })
+                ? GlassTabBar.selectStockTab(source, among: stockViews)
+                : false
             if !selected {
                 eeveeLog("[EeveeSpotify][Glass] Tab %d '%@' tap FAILED", index, item.title ?? "")
             }
@@ -263,32 +263,49 @@ enum GlassTabBar {
         UserDefaults.knownTabs = titles
     }
 
-    // Selects a stock tab through Spotify's tab container. There is no gesture-replay
-    // fallback anymore. Replaying the item's tap recognizer (the old EeveeFireTap path)
-    // invokes TabBarItemElementUI.handleTap out of band, with no real gesture cycle, on
-    // items that are hidden and interaction-disabled under the glass bar; the container's
-    // didSelect handler fans the interaction out through SPTTabBarLogger to the page
-    // coordinator before selecting anything, and that presentation path installs a
-    // SwiftUI page's bare UIHostingController into the page-context
-    // SPNavigationController, tripping the assertion at SPNavigationController.swift:488
-    // (frame-verified against the 9.2.2 binary). The container's selectedViewController
-    // setter, by contrast, is the same internal containment swap Spotify's own
-    // programmatic selection funnels through — it never touches the event fan-out.
+    // Selects a stock tab, in layers, most-proven first. There is no gesture-replay
+    // fallback in any layer. Replaying the item's tap recognizer (the old EeveeFireTap
+    // path) invokes TabBarItemElementUI.handleTap out of band, with no real gesture
+    // cycle, on items that are hidden and interaction-disabled under the glass bar.
+    // Inside the container's didSelect handler the selection itself completes first;
+    // the handler then fans the interaction out through SPTTabBarLogger, and a
+    // subscriber's page presentation installs a SwiftUI page's bare
+    // UIHostingController as the content of the page-context SPNavigationController,
+    // tripping the assertion at SPNavigationController.swift:488 (frame- and
+    // instruction-verified against the 9.2.2 binary). A synthetic touch event would
+    // not be equivalent to a real tap either: UIKit would never deliver one to the
+    // hidden, interaction-disabled stock views, and the coordinator's reaction
+    // depends on runtime presentation state — so no form of tap replay returns.
     //
-    // The ordinal mapping is only trusted when the container's tabViewControllers count
-    // matches the number of visible stock tab views exactly: the getter builds that
-    // array from the container's index-keyed tab dictionary and skips tabs whose view
-    // controller has not been materialized yet, so with unvisited tabs the array is
-    // compacted and an ordinal could point at the wrong controller. When the counts
-    // differ, the one remaining unambiguous case — re-selecting the already-active
-    // tab — succeeds as a no-op; anything else returns false and logs the counts
-    // rather than guessing. A tab with no materialized view controller cannot be
-    // selected directly at all: there is no object to assign, and Spotify's own
-    // select-by-index silently returns for such an index.
-    static func selectStockTab(_ source: UIView, ordinal: Int, stockCount: Int) -> Bool {
-        // Walk the responder chains of the tapped view and of the stock bar (they
-        // normally converge). A candidate whose controller count matches exactly
-        // wins immediately; otherwise remember the first candidate for the log.
+    // Layer 1/2 — direct selection through the container's selectedViewController
+    // setter, the same internal containment swap Spotify's own programmatic
+    // selection funnels through (it never touches the event fan-out). The mapping
+    // from the tapped item to a controller is the delicate part. The container's
+    // tabViewControllers getter walks its per-index accessor in tab order, and
+    // that accessor materializes a tab's view controller on first use — it asks
+    // the tab's TabBarItemViewControllerFactory and caches the result in the
+    // container's index-keyed dictionary — so an unvisited tab IS present after
+    // one read. What the getter skips is an index whose factory produces no
+    // controller at all: an action item such as the creation button, which has
+    // no page. Those gaps compact the array, so an ordinal maps directly only
+    // when there are no gaps (layer 1), or when the gap positions relative to
+    // the active tab pin the target's position down (layer 2, see directTarget).
+    //
+    // Layer 3 — when no controller can be identified, navigate Spotify's own
+    // link dispatcher to the tab's URI: the official navigation entry that deep
+    // links and push notifications land on, which runs the whole
+    // materialize-and-present machinery itself. This needs the tab's identity,
+    // taken from the item's accessibility identifier (locale-independent);
+    // without one, the tap fails with a log line rather than a guess.
+    static func selectStockTab(_ source: UIView, among stockViews: [UIView]) -> Bool {
+        guard let ordinal = stockViews.firstIndex(where: { $0 === source }) else { return false }
+        let stockCount = stockViews.count
+        // The anchor for layer 2 is only trusted when exactly one stock item
+        // reads as active; zero or several matches mean the heuristic state is
+        // not reliable enough to arithmetic on.
+        let activeViews = stockViews.indices.filter { isActive(stockViews[$0], label: label(in: stockViews[$0])) }
+        let activeOrdinal = activeViews.count == 1 ? activeViews[0] : nil
+
         var fallbackCount: Int?
         for start in [source, stock].compactMap({ $0 }) {
             var responder: UIResponder? = start
@@ -296,16 +313,21 @@ enum GlassTabBar {
                 if let container = current as? UIViewController,
                    container.responds(to: NSSelectorFromString("setSelectedViewController:")),
                    let controllers = tabControllers(of: container) {
-                    if controllers.count == stockCount, ordinal < controllers.count {
-                        container.setValue(controllers[ordinal], forKey: "selectedViewController")
+                    if fallbackCount == nil { fallbackCount = controllers.count }
+                    if let target = directTarget(in: controllers, ordinal: ordinal, stockCount: stockCount,
+                                                 activeOrdinal: activeOrdinal, container: container) {
+                        container.setValue(target, forKey: "selectedViewController")
                         return true
                     }
-                    if fallbackCount == nil { fallbackCount = controllers.count }
                 }
                 responder = current.next
             }
         }
         if isActive(source, label: label(in: source)) {
+            return true
+        }
+        if let uri = stockTabURI(for: source), CustomTabs.navigateStockURI(uri) {
+            eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d opened via URI %@", ordinal, uri)
             return true
         }
         if let fallbackCount {
@@ -317,6 +339,70 @@ enum GlassTabBar {
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: no tab container for ordinal %d/%d", ordinal, stockCount)
         }
         return false
+    }
+
+    // Maps a tapped stock item to the container's view controller for it, or nil
+    // when the position cannot be determined without guessing. See the layer
+    // discussion above selectStockTab.
+    private static func directTarget(in controllers: [UIViewController], ordinal: Int, stockCount: Int,
+                                     activeOrdinal: Int?, container: UIViewController) -> UIViewController? {
+        // No gaps: the array is in tab order and the ordinal is the index.
+        if controllers.count == stockCount {
+            return ordinal < controllers.count ? controllers[ordinal] : nil
+        }
+        // With gaps, the target's position shifts by the number of gap items
+        // before it. The one measurable quantity is the gaps before the active
+        // tab: its ordinal minus the selected controller's position in the
+        // compacted array. That determines the target's position only when all
+        // gaps are known to sit on one side of the active tab.
+        let gap = stockCount - controllers.count
+        guard gap > 0, gap <= 2,
+              let activeOrdinal,
+              container.responds(to: NSSelectorFromString("selectedViewController")),
+              let selected = container.value(forKey: "selectedViewController") as? UIViewController,
+              let selectedPos = controllers.firstIndex(of: selected) else { return nil }
+        let gapsBeforeActive = activeOrdinal - selectedPos
+        guard gapsBeforeActive >= 0, gapsBeforeActive <= gap else { return nil }
+        if ordinal == activeOrdinal { return selected }
+        if ordinal > activeOrdinal, gapsBeforeActive == gap {
+            // Every gap is at or before the active tab, so all later tabs
+            // shift by the full gap count.
+            let pos = ordinal - gap
+            return pos > selectedPos && pos < controllers.count ? controllers[pos] : nil
+        }
+        if ordinal < activeOrdinal, gapsBeforeActive == 0 {
+            // No gap at or before the active tab, so earlier tabs are
+            // unshifted.
+            return ordinal < selectedPos ? controllers[ordinal] : nil
+        }
+        return nil
+    }
+
+    // The tab's URI, when the stock item carries one of the tab identifiers
+    // the 9.2.2 binary names its tabs by ("home", "search", "your_library").
+    // Identifiers are locale-independent, unlike the item titles, which are
+    // not in the app bundle's localizations at all. Only URIs present as
+    // literal strings in the binary are produced; anything else returns nil
+    // and the caller logs the failure instead of guessing.
+    private static func stockTabURI(for source: UIView) -> String? {
+        let uris = [
+            "home": "spotify:home",
+            "search": "spotify:search",
+            "your_library": "spotify:collection",
+            "yourlibrary": "spotify:collection",
+            "library": "spotify:collection",
+        ]
+        var view: UIView? = source
+        var depth = 0
+        while let current = view, depth < 8 {
+            if let id = current.accessibilityIdentifier?.lowercased(), let uri = uris[id] { return uri }
+            view = current.superview
+            depth += 1
+        }
+        for sub in source.subviews {
+            if let id = sub.accessibilityIdentifier?.lowercased(), let uri = uris[id] { return uri }
+        }
+        return nil
     }
 
     private static func tabControllers(of container: UIViewController) -> [UIViewController]? {
@@ -336,8 +422,7 @@ enum GlassTabBar {
         guard let wanted = options.launchTab,
               let tab = tabs.first(where: { title($0) == wanted }),
               !isActive(tab, label: label(tab)) else { return }
-        let ordinal = tabs.firstIndex(of: tab)
-        let fired = ordinal.map { selectStockTab(tab, ordinal: $0, stockCount: tabs.count) } ?? false
+        let fired = selectStockTab(tab, among: tabs)
         eeveeLog("[EeveeSpotify][Glass] Launch tab '%@' %@", wanted, fired ? "opened" : "FAILED")
     }
 
@@ -520,6 +605,54 @@ enum CustomTabs {
             return
         }
         select(tab)
+    }
+
+    // Opens a stock tab through the link dispatcher — the same official
+    // navigation entry deep links land on — for the cases where the tab's
+    // view controller cannot be identified in the tab container (see
+    // GlassTabBar.selectStockTab). Unlike open(_:), this does not touch the
+    // custom-tab selection state: the destination is a stock tab, and the
+    // caller has already cleared any custom selection. Returns whether the
+    // navigation was dispatched.
+    static func navigateStockURI(_ uri: String) -> Bool {
+        guard let url = URL(string: uri) else { return false }
+        guard let dispatcher else {
+            eeveeLog("[EeveeSpotify][Glass] Stock tab %@ not opened: link dispatcher not captured yet", uri)
+            return false
+        }
+        if dispatcher.responds(to: navigateShort) {
+            typealias Navigate = @convention(c) (NSObject, Selector, NSURL, Int64, AnyObject?) -> Void
+            unsafeBitCast(dispatcher.method(for: navigateShort), to: Navigate.self)(dispatcher, navigateShort, url as NSURL, 0, nil)
+            return true
+        } else if dispatcher.responds(to: navigateFull) {
+            let reason: AnyObject? = {
+                guard let reasonClass = NSClassFromString("SPTUBINavigationReason") else { return nil }
+                let allocSel = NSSelectorFromString("alloc")
+                let initSel = NSSelectorFromString("initWithSourceApplication:interactionID:")
+                guard reasonClass.responds(to: allocSel), reasonClass.instancesRespond(to: initSel) else { return nil }
+                guard let msgSend = dlsym(dlopen(nil, RTLD_LAZY), "objc_msgSend") else { return nil }
+                typealias AllocFn = @convention(c) (AnyClass, Selector) -> Unmanaged<AnyObject>
+                let allocFn = unsafeBitCast(msgSend, to: AllocFn.self)
+                let raw = allocFn(reasonClass, allocSel)
+                typealias InitFn = @convention(c) (Unmanaged<AnyObject>, Selector, AnyObject?, AnyObject?) -> Unmanaged<AnyObject>?
+                let initFn = unsafeBitCast(msgSend, to: InitFn.self)
+                guard let result = initFn(raw, initSel, nil, nil) else {
+                    raw.release()
+                    return nil
+                }
+                return result.takeRetainedValue()
+            }()
+            guard let reason else {
+                eeveeLog("[EeveeSpotify][Glass] Stock tab %@ not opened: navigation reason could not be created", uri)
+                return false
+            }
+            typealias Navigate = @convention(c) (NSObject, Selector, NSURL, Int64, AnyObject?, AnyObject?, AnyObject?) -> Void
+            unsafeBitCast(dispatcher.method(for: navigateFull), to: Navigate.self)(dispatcher, navigateFull, url as NSURL, 0, reason, nil, nil)
+            return true
+        } else {
+            eeveeLog("[EeveeSpotify][Glass] Stock tab %@ not opened: link dispatcher has no known navigation method", uri)
+            return false
+        }
     }
 
     // The page is pushed on the current Spotify tab, so the custom tab stays selected only while that page is on screen.
