@@ -9,20 +9,32 @@ class INMediaItemHook: ClassHook<INMediaItem> {
         
         if identifier.contains("play-command") {
             let components = identifier.components(separatedBy: ":")
-            let jsonData = Data(base64Encoded: components[2])!
-            var json = try! JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+            
+            // The payload segment is external data whose shape Spotify can
+            // change at any time. If it no longer matches the expected form,
+            // leave the identifier untouched instead of crashing.
+            guard components.count > 2,
+                  let jsonData = Data(base64Encoded: components[2]),
+                  var json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
+            else {
+                return identifier
+            }
                 
             if let feedbackDetails = json["feedback_details"] as? [String: Any],
                feedbackDetails["restriction"] as? String == "play-as-radio" {
-                var context = json["context"] as! [String: Any]
+                guard var context = json["context"] as? [String: Any],
+                      let urlString = context["url"] as? String
+                else {
+                    return identifier
+                }
                 
-                let urlString = context["url"] as! String
                 context["url"] = urlString.removeMatches(":station")
                 
                 json["context"] = context
                 
-                let newData = try! JSONSerialization.data(withJSONObject: json)
-                identifier = "spotify:play-command:\(newData.base64EncodedString())"
+                if let newData = try? JSONSerialization.data(withJSONObject: json) {
+                    identifier = "spotify:play-command:\(newData.base64EncodedString())"
+                }
             }
         }
         
