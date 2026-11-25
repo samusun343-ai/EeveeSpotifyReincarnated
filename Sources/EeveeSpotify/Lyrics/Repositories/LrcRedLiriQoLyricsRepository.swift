@@ -765,6 +765,13 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             texts.removeLast()
         }
 
+        // Same guard as the standalone LRCLIB source: an all-blank plain
+        // text is a miss, not a plain floor — otherwise it would be
+        // stored by the offline cache as if the song had lyrics.
+        guard texts.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+            throw LyricsError.noSuchSong
+        }
+
         return LyricsDto(
             lines: texts.map { LyricsLineDto(content: $0) },
             timeSynced: false,

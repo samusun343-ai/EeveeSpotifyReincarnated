@@ -16,8 +16,13 @@ import Foundation
 /// which keeps the semantics of `invalidateLyricsForSourceChange()` — after
 /// a provider switch the next visit fetches from the new provider (the old
 /// entry is simply never served, and is overwritten if that track is
-/// fetched again). Title/artist are stored too and checked against the
-/// query, so a track ID that resolves to different metadata can never
+/// fetched again). One refinement of "the source that produced them": a
+/// result produced by the Genius fallback is filed under the selected
+/// source whose pipeline produced it (with the Genius credit pinned on
+/// the DTO), because filing it under .genius made it unservable under the
+/// very configuration that fetched it.
+/// Title/artist are stored too and checked against the query, so a track
+/// ID that resolves to different metadata can never
 /// serve the wrong song's lyrics.
 ///
 /// Payloads are JSON, zlib-compressed: measured on representative songs,

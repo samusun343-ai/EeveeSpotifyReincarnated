@@ -133,7 +133,13 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     )
     
     let options = UserDefaults.lyricsOptions
-    
+
+    // The source the user selected, i.e. the pipeline this fetch belongs
+    // to. `source` itself is reassigned to .genius when the Genius
+    // fallback produces the result; the offline cache entry is filed
+    // under this pipeline source (see the store call below).
+    let pipelineSource = source
+
     var repository: LyricsRepository
 
     switch source {
@@ -151,7 +157,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         throw LyricsError.invalidSource
     }
     
-    let lyricsDto: LyricsDto
+    var lyricsDto: LyricsDto
     // Karaoke data the repository itself published while fetching (word-synced
     // sources), captured so the offline cache can store it with the DTO.
     var repositoryKaraoke: KaraokeLyricsDto?
@@ -196,6 +202,16 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             if canFallbackToGenius {
                 source = .genius
                 lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+
+                // Pin the producing source onto the DTO itself: the
+                // offline cache files this result under the selected
+                // pipeline source (see below), so without the credit a
+                // later cache serve would attribute Genius's lyrics to
+                // the selected source. The live serve is unaffected —
+                // `source` is .genius here, which the credit restates.
+                if lyricsDto.providerCredit == nil {
+                    lyricsDto.providerCredit = LyricsSource.genius.description
+                }
             } else {
                 throw error
             }
@@ -218,11 +234,19 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     let timingOffsetMs = UserDefaults.lyricsTimingOffsets.effectiveMs(forTrackId: searchQuery.spotifyTrackId)
 
     if !servedFromOfflineCache {
+        // File under the selected (pipeline) source, not `source`: after
+        // a Genius fallback `source` is .genius, and an entry recorded
+        // under .genius can only ever be served while Genius itself is
+        // the selected source — under the configuration that actually
+        // fetched it, the entry was dead weight that occupied the cache
+        // (and showed in the management screen) but never served. The
+        // DTO's provider credit, pinned at the fallback above, keeps the
+        // true producer visible on later serves.
         LyricsOfflineCache.shared.store(
             dto: lyricsDto,
             karaoke: repositoryKaraoke,
             query: searchQuery,
-            source: source
+            source: pipelineSource
         )
     }
 
