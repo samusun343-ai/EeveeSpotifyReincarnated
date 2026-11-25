@@ -8,9 +8,13 @@ import Foundation
 /// Musixmatch, NetEase, PetitLyrics, LRCLIB, ...) that often has a song
 /// when lrc.red does not — but it is slow (several seconds) and tightly
 /// rate-limited, so it is only queried, once and without retries, when
-/// stage 1 found nothing. If both stages fail, the error propagates and
-/// the existing Genius fallback in CustomLyrics takes over as the final
-/// fallback.
+/// stage 1 found nothing, and once more as an upgrade attempt when
+/// stage 1 only had untimed (plain) lyrics: a synced LiriQo result then
+/// replaces the plain text, while any LiriQo failure keeps it. LiriQo
+/// outcomes are cached in memory for the session (LRU, 100 entries) so
+/// repeat plays never re-ask. If both stages fail, the error propagates
+/// and the existing Genius fallback in CustomLyrics takes over as the
+/// final fallback.
 ///
 /// lrc.red's terms require an identifying User-Agent and a visible
 /// credit, so every request carries the app name + repository link and
@@ -25,6 +29,23 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     private static let userAgent = "EeveeSpotifyReincarnated v\(EeveeSpotify.version) (+https://github.com/samusun343-ai/EeveeSpotifyReincarnated)"
     private static let lrcRedBaseUrl = "https://lrc.red"
     private static let liriQoBaseUrl = "https://api.liriqo-alfarrizi.my.id/v1"
+
+    // MARK: - LiriQo session cache
+
+    /// One cached LiriQo outcome. A hit keeps only the DTOs needed to
+    /// replay the result — never the raw response or extra metadata —
+    /// and a miss is a bare marker. Memory-only: nothing is written to
+    /// disk or UserDefaults, and the cache dies with the process.
+    private enum LiriQoCacheEntry {
+        case hit(dto: LyricsDto, karaoke: KaraokeLyricsDto?)
+        case miss
+    }
+
+    private static let liriQoCacheCapacity = 100
+
+    private let liriQoCacheLock = NSLock()
+    private var liriQoCache: [String: LiriQoCacheEntry] = [:]
+    private var liriQoCacheOrder: [String] = []
 
     private init() {
         let lrcRedConfiguration = URLSessionConfiguration.ephemeral
@@ -98,14 +119,35 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     // MARK: - LyricsRepository
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
+        var lrcRedPlainLyrics: LyricsDto?
+
         do {
             let dto = try getLrcRedLyrics(query)
-            if !dto.lines.isEmpty {
+
+            if dto.timeSynced, !dto.lines.isEmpty {
                 return dto
             }
-            writeDebugLog("[lrc.red+LiriQo] lrc.red returned no lines for \(query.title)/\(query.primaryArtist), trying LiriQo")
+
+            if !dto.lines.isEmpty {
+                // lrc.red has the song, but only as untimed (plain) text.
+                // Keep it as a floor and let stage 2 try to upgrade it to
+                // a synced version below: plain text beats no lyrics, but
+                // a synced LiriQo result beats plain text.
+                lrcRedPlainLyrics = dto
+                writeDebugLog("[lrc.red+LiriQo] lrc.red returned plain-only lyrics for \(query.title)/\(query.primaryArtist), trying LiriQo for a synced version")
+            } else {
+                writeDebugLog("[lrc.red+LiriQo] lrc.red returned no lines for \(query.title)/\(query.primaryArtist), trying LiriQo")
+            }
         } catch {
             writeDebugLog("[lrc.red+LiriQo] lrc.red failed for \(query.title)/\(query.primaryArtist): \(error), trying LiriQo")
+        }
+
+        if let lrcRedPlainLyrics {
+            if let upgraded = try? getLiriQoLyrics(query), upgraded.timeSynced, !upgraded.lines.isEmpty {
+                return upgraded
+            }
+
+            return lrcRedPlainLyrics
         }
 
         return try getLiriQoLyrics(query)
@@ -398,7 +440,84 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
     // MARK: - Stage 2: LiriQo
 
+    /// Cache-fronted stage 2 entry point. A cached hit replays its DTOs
+    /// (including the karaoke store handoff) without any network request;
+    /// a cached miss rethrows `noSuchSong` so callers keep their existing
+    /// fallback behaviour. Fresh outcomes — success and failure alike —
+    /// are stored, so a track is never asked about twice in a session.
     private func getLiriQoLyrics(_ query: LyricsSearchQuery) throws -> LyricsDto {
+        let cacheKey = liriQoCacheKey(for: query)
+
+        if let entry = cachedLiriQoEntry(for: cacheKey) {
+            switch entry {
+            case .hit(let dto, let karaoke):
+                writeDebugLog("[LiriQo] Session cache hit for \(query.title)/\(query.primaryArtist)")
+
+                if let karaoke {
+                    KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+                }
+
+                return dto
+            case .miss:
+                writeDebugLog("[LiriQo] Session cache hit (no lyrics) for \(query.title)/\(query.primaryArtist)")
+                throw LyricsError.noSuchSong
+            }
+        }
+
+        do {
+            let (dto, karaoke) = try fetchLiriQoLyrics(query)
+            storeLiriQoEntry(.hit(dto: dto, karaoke: karaoke), for: cacheKey)
+
+            if let karaoke {
+                KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+            }
+
+            return dto
+        } catch {
+            storeLiriQoEntry(.miss, for: cacheKey)
+            throw error
+        }
+    }
+
+    /// The Spotify track ID is the stable identity; fall back to the
+    /// normalized title/artist pair when a query carries none.
+    private func liriQoCacheKey(for query: LyricsSearchQuery) -> String {
+        if !query.spotifyTrackId.isEmpty {
+            return "id:\(query.spotifyTrackId)"
+        }
+
+        return "meta:\(normalizedForMatch(query.title))|\(normalizedForMatch(query.primaryArtist))"
+    }
+
+    private func cachedLiriQoEntry(for key: String) -> LiriQoCacheEntry? {
+        liriQoCacheLock.lock()
+        defer { liriQoCacheLock.unlock() }
+
+        guard let entry = liriQoCache[key] else {
+            return nil
+        }
+
+        // Refresh recency so replayed tracks survive eviction.
+        liriQoCacheOrder.removeAll { $0 == key }
+        liriQoCacheOrder.append(key)
+
+        return entry
+    }
+
+    private func storeLiriQoEntry(_ entry: LiriQoCacheEntry, for key: String) {
+        liriQoCacheLock.lock()
+        defer { liriQoCacheLock.unlock() }
+
+        liriQoCache[key] = entry
+        liriQoCacheOrder.removeAll { $0 == key }
+        liriQoCacheOrder.append(key)
+
+        while liriQoCacheOrder.count > Self.liriQoCacheCapacity {
+            liriQoCache[liriQoCacheOrder.removeFirst()] = nil
+        }
+    }
+
+    private func fetchLiriQoLyrics(_ query: LyricsSearchQuery) throws -> (dto: LyricsDto, karaoke: KaraokeLyricsDto?) {
         let queryString = ([
             "title": query.title,
             "artist": query.primaryArtist
@@ -434,13 +553,11 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
-        // Prefer the primary track; fall back to the first candidate that
-        // actually carries lyrics (primary is normally also in tracks).
+        // Pick the best usable candidate (primary is normally also in
+        // tracks, and stays first in the list so it wins ties).
         let candidates = [response.primary].compactMap { $0 } + (response.tracks ?? [])
 
-        guard let track = candidates.first(where: {
-            ($0.timed?.isEmpty == false) || ($0.plain?.isEmpty == false)
-        }) else {
+        guard let track = bestLiriQoTrack(candidates, query: query) else {
             throw LyricsError.noSuchSong
         }
 
@@ -496,24 +613,21 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 throw LyricsError.noSuchSong
             }
 
-            if !karaokeLines.isEmpty {
-                KaraokeLyricsStore.shared.set(
-                    trackId: query.spotifyTrackId,
-                    lyrics: KaraokeLyricsDto(
-                        lines: karaokeLines,
-                        songWriters: [],
-                        providerCode: track.provider,
-                        providerName: "LiriQo"
-                    )
-                )
-            }
+            // Handed to the caller instead of the karaoke store directly,
+            // so the result can be cached and replayed as-is.
+            let karaoke = karaokeLines.isEmpty ? nil : KaraokeLyricsDto(
+                lines: karaokeLines,
+                songWriters: [],
+                providerCode: track.provider,
+                providerName: "LiriQo"
+            )
 
-            return LyricsDto(
+            return (dto: LyricsDto(
                 lines: lines,
                 timeSynced: true,
                 romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
                 providerCredit: providerCredit
-            )
+            ), karaoke: karaoke)
         }
 
         guard let plainLyrics = track.plain, !plainLyrics.isEmpty else {
@@ -522,12 +636,47 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
         let texts = plainLyrics.components(separatedBy: "\n")
 
-        return LyricsDto(
+        return (dto: LyricsDto(
             lines: texts.map { LyricsLineDto(content: $0) },
             timeSynced: false,
             romanization: texts.canBeRomanized ? .canBeRomanized : .original,
             providerCredit: providerCredit
-        )
+        ), karaoke: nil)
+    }
+
+    /// Picks the best usable LiriQo candidate. A normalized title+artist
+    /// match beats a title-only match beats no match; at equal match
+    /// quality, word sync beats line sync beats plain — judged from the
+    /// payload itself (timed lines carrying word timings), not from the
+    /// server's syncLevel label. Candidates are listed primary-first and
+    /// earlier candidates win full ties, so the server's own choice still
+    /// prevails whenever nothing outranks it.
+    private func bestLiriQoTrack(_ candidates: [LiriQoTrack], query: LyricsSearchQuery) -> LiriQoTrack? {
+        let usable = candidates.filter {
+            ($0.timed?.isEmpty == false) || ($0.plain?.isEmpty == false)
+        }
+
+        let wantedTitle = normalizedForMatch(query.title)
+        let wantedArtist = normalizedForMatch(query.primaryArtist)
+
+        func rank(of track: LiriQoTrack, index: Int) -> (Int, Int, Int) {
+            let titleMatches = normalizedForMatch(track.title ?? "") == wantedTitle
+            let artistMatches = normalizedForMatch(track.artist ?? "") == wantedArtist
+            let match = titleMatches && artistMatches ? 2 : (titleMatches ? 1 : 0)
+
+            let sync: Int
+            if let timed = track.timed, !timed.isEmpty {
+                sync = timed.contains { $0.words?.isEmpty == false } ? 2 : 1
+            } else {
+                sync = 0
+            }
+
+            return (match, sync, -index)
+        }
+
+        return usable.enumerated().max { lhs, rhs in
+            rank(of: lhs.element, index: lhs.offset) < rank(of: rhs.element, index: rhs.offset)
+        }?.element
     }
 }
 
@@ -625,6 +774,8 @@ private struct LiriQoTrack: Decodable {
     var provider: String?
     var upstreamProvider: String?
     var syncLevel: String?
+    var title: String?
+    var artist: String?
     var plain: String?
     var timed: [LiriQoTimedLine]?
 }
