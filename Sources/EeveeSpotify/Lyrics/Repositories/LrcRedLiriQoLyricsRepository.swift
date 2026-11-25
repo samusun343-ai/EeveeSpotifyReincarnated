@@ -170,9 +170,39 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     }
 
     private func searchLrcRed(query: LyricsSearchQuery) throws -> String {
+        var hits = try fetchLrcRedSearchHits(title: query.title, artist: query.primaryArtist)
+
+        if hits.isEmpty {
+            // lrc.red search matches against its catalog titles, which omit
+            // "(feat. …)"-style suffixes that Spotify track titles carry —
+            // searching with the raw title returns zero hits for such tracks
+            // (verified with Koruru "Our Memories (feat. Nakasa)"). Retry
+            // once with the stripped title before giving up on this stage.
+            let strippedTitle = query.title.strippedTrackTitle
+
+            if strippedTitle != query.title {
+                writeDebugLog("[lrc.red] No hits for raw title \(query.title), retrying with stripped title \(strippedTitle)")
+                hits = try fetchLrcRedSearchHits(title: strippedTitle, artist: query.primaryArtist)
+            }
+        }
+
+        guard !hits.isEmpty else {
+            throw LyricsError.noSuchSong
+        }
+
+        let hit = bestLrcRedHit(hits, query: query) ?? hits[0]
+
+        guard let isrc = hit.isrc, !isrc.isEmpty else {
+            throw LyricsError.noSuchSong
+        }
+
+        return isrc
+    }
+
+    private func fetchLrcRedSearchHits(title: String, artist: String) throws -> [LrcRedSearchResponse.Hit] {
         // lrc.red search fails on queries containing apostrophes
         // (observed by other integrators), so strip them beforehand.
-        let searchText = "\(query.title) \(query.primaryArtist)".removingApostrophes
+        let searchText = "\(title) \(artist)".removingApostrophes
         let stringUrl = "\(Self.lrcRedBaseUrl)/search.json?\((["q": searchText]).queryString)"
 
         let (data, statusCode) = try perform(stringUrl, session: lrcRedSession, logTag: "lrc.red")
@@ -190,17 +220,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             throw LyricsError.decodingError
         }
 
-        guard let hits = response.hits, !hits.isEmpty else {
-            throw LyricsError.noSuchSong
-        }
-
-        let hit = bestLrcRedHit(hits, query: query) ?? hits[0]
-
-        guard let isrc = hit.isrc, !isrc.isEmpty else {
-            throw LyricsError.noSuchSong
-        }
-
-        return isrc
+        return response.hits ?? []
     }
 
     /// Prefers a hit whose normalized title and artist both match the
