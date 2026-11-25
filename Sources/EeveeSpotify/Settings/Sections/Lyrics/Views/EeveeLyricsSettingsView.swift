@@ -4,6 +4,9 @@ struct EeveeLyricsSettingsView: View {
     @StateObject var viewModel = EeveeLyricsSettingsViewModel()
     @State private var karaokeOptions: KaraokeOptions = UserDefaults.karaokeOptions
     @State var spicyLyricsApiKey: String = UserDefaults.spicyLyricsApiKey
+    @State var lyricsOfflineCacheEnabled: Bool = UserDefaults.lyricsOfflineCacheEnabled
+    @State var lyricsCacheUsageCount: Int = 0
+    @State var lyricsCacheUsageBytes: Int = 0
 
     var body: some View {
         List {
@@ -16,6 +19,7 @@ struct EeveeLyricsSettingsView: View {
                 
                 hideOnErrorSection()
                 romanizedLyricsSection()
+                offlineCacheSection()
                 
                 if viewModel.lyricsSource.supportsCustomLyricsView {
                     karaokeAppearanceSection()
@@ -29,6 +33,8 @@ struct EeveeLyricsSettingsView: View {
         .animation(.default, value: viewModel.animationValues)
         .onChange(of: karaokeOptions) { UserDefaults.karaokeOptions = $0 }
         .onChange(of: spicyLyricsApiKey) { UserDefaults.spicyLyricsApiKey = $0 }
+        .onChange(of: lyricsOfflineCacheEnabled) { UserDefaults.lyricsOfflineCacheEnabled = $0 }
+        .onAppear { refreshLyricsCacheUsage() }
     }
 
     @ViewBuilder private func karaokeAppearanceSection() -> some View {

@@ -132,35 +132,56 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     }
     
     let lyricsDto: LyricsDto
-    
+    // Karaoke data the repository itself published while fetching (word-synced
+    // sources), captured so the offline cache can store it with the DTO.
+    var repositoryKaraoke: KaraokeLyricsDto?
+    var servedFromOfflineCache = false
+
     updateLyricsState { $0 = LyricsLoadingState() }
 
-    // A fresh fetch starts from nothing, so the custom lyrics button only shows
-    // for lyrics this fetch actually produced.
-    KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
-    
-    do {
-        lyricsDto = try repository.getLyrics(searchQuery, options: options)
-    }
-    catch let error {
-        if let lyricsError = error as? LyricsError {
-            updateLyricsState { $0.fallbackError = lyricsError }
-        } else {
-            updateLyricsState { $0.fallbackError = .unknownError }
+    if let cached = LyricsOfflineCache.shared.cachedLyrics(for: searchQuery, source: source) {
+        // Offline cache hit — no network fetch at all. Stored karaoke data is
+        // republished exactly as the fresh fetch would have published it.
+        servedFromOfflineCache = true
+        lyricsDto = cached.dto
+
+        KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+
+        if let karaoke = cached.karaoke {
+            KaraokeLyricsStore.shared.set(trackId: searchQuery.spotifyTrackId, lyrics: karaoke)
         }
 
-        // Attempt Genius fallback if enabled and the primary source isn't already Genius.
-        // Genius requires title + artist to search — only attempt if we have them.
-        let canFallbackToGenius = source != .genius
-            && UserDefaults.lyricsOptions.geniusFallback
-            && !(currentTitle ?? "").isEmpty
-            && !(currentArtist ?? "").isEmpty
-        if canFallbackToGenius {
-            source = .genius
-            lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
-        } else {
-            throw error
+        writeDebugLog("[Lyrics] \(trackId): offline cache hit, \(lyricsDto.lines.count) lines")
+    } else {
+        // A fresh fetch starts from nothing, so the custom lyrics button only shows
+        // for lyrics this fetch actually produced.
+        KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+    
+        do {
+            lyricsDto = try repository.getLyrics(searchQuery, options: options)
         }
+        catch let error {
+            if let lyricsError = error as? LyricsError {
+                updateLyricsState { $0.fallbackError = lyricsError }
+            } else {
+                updateLyricsState { $0.fallbackError = .unknownError }
+            }
+
+            // Attempt Genius fallback if enabled and the primary source isn't already Genius.
+            // Genius requires title + artist to search — only attempt if we have them.
+            let canFallbackToGenius = source != .genius
+                && UserDefaults.lyricsOptions.geniusFallback
+                && !(currentTitle ?? "").isEmpty
+                && !(currentArtist ?? "").isEmpty
+            if canFallbackToGenius {
+                source = .genius
+                lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+            } else {
+                throw error
+            }
+        }
+
+        repositoryKaraoke = KaraokeLyricsStore.shared.lyrics(forTrackId: searchQuery.spotifyTrackId)
     }
     
     updateLyricsState {
@@ -172,6 +193,15 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
 
     writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced)")
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
+
+    if !servedFromOfflineCache {
+        LyricsOfflineCache.shared.store(
+            dto: lyricsDto,
+            karaoke: repositoryKaraoke,
+            query: searchQuery,
+            source: source
+        )
+    }
 
     let lyrics = Lyrics.with {
         $0.data = lyricsDto.toSpotifyLyricsData(source: source.description)
@@ -230,32 +260,53 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     }
     
     let lyricsDto: LyricsDto
-    
+    // Karaoke data the repository itself published while fetching (word-synced
+    // sources), captured so the offline cache can store it with the DTO.
+    var repositoryKaraoke: KaraokeLyricsDto?
+    var servedFromOfflineCache = false
+
     updateLyricsState { $0 = LyricsLoadingState() }
 
-    // A fresh fetch starts from nothing, so the custom lyrics button only shows
-    // for lyrics this fetch actually produced.
-    KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+    if let cached = LyricsOfflineCache.shared.cachedLyrics(for: searchQuery, source: source) {
+        // Offline cache hit — no network fetch at all. Stored karaoke data is
+        // republished exactly as the fresh fetch would have published it.
+        servedFromOfflineCache = true
+        lyricsDto = cached.dto
+
+        KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+
+        if let karaoke = cached.karaoke {
+            KaraokeLyricsStore.shared.set(trackId: searchQuery.spotifyTrackId, lyrics: karaoke)
+        }
+
+        writeDebugLog("[Lyrics] \(searchQuery.spotifyTrackId): offline cache hit, \(lyricsDto.lines.count) lines")
+    } else {
+        // A fresh fetch starts from nothing, so the custom lyrics button only shows
+        // for lyrics this fetch actually produced.
+        KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
     
-    do {
-        lyricsDto = try repository.getLyrics(searchQuery, options: options)
-    }
-    catch let error {
-        if let error = error as? LyricsError {
-            updateLyricsState { $0.fallbackError = error }
+        do {
+            lyricsDto = try repository.getLyrics(searchQuery, options: options)
         }
-        else {
-            updateLyricsState { $0.fallbackError = .unknownError }
+        catch let error {
+            if let error = error as? LyricsError {
+                updateLyricsState { $0.fallbackError = error }
+            }
+            else {
+                updateLyricsState { $0.fallbackError = .unknownError }
+            }
+        
+            if source == .genius || !UserDefaults.lyricsOptions.geniusFallback {
+                throw error
+            }
+        
+            source = .genius
+            repository = GeniusLyricsRepository()
+        
+            lyricsDto = try repository.getLyrics(searchQuery, options: options)
         }
-        
-        if source == .genius || !UserDefaults.lyricsOptions.geniusFallback {
-            throw error
-        }
-        
-        source = .genius
-        repository = GeniusLyricsRepository()
-        
-        lyricsDto = try repository.getLyrics(searchQuery, options: options)
+
+        repositoryKaraoke = KaraokeLyricsStore.shared.lyrics(forTrackId: searchQuery.spotifyTrackId)
     }
     
     updateLyricsState {
@@ -266,6 +317,15 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
     }
 
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
+
+    if !servedFromOfflineCache {
+        LyricsOfflineCache.shared.store(
+            dto: lyricsDto,
+            karaoke: repositoryKaraoke,
+            query: searchQuery,
+            source: source
+        )
+    }
 
     let lyrics = Lyrics.with {
         $0.data = lyricsDto.toSpotifyLyricsData(source: source.description)

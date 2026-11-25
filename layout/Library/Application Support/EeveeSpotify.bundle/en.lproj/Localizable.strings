@@ -60,6 +60,18 @@ hide_lyrics_on_error_description = "Remove the lyrics component if lyrics fail t
 romanized_lyrics = "Romanized Lyrics";
 romanized_lyrics_description = "Display romanized lyrics for Japanese, Korean, and Chinese.";
 
+lyrics_offline_cache_section = "Offline Cache";
+lyrics_offline_cache = "Cache Lyrics Offline";
+lyrics_offline_cache_description = "Lyrics are stored on this device after they load, so playing a song again shows its lyrics instantly — even without a connection, and without asking rate-limited providers again. Entries are kept per lyrics source, and the oldest ones are removed automatically when the cache grows past 300 songs or 16 MB.";
+lyrics_offline_cache_usage_label = "Cached Lyrics";
+lyrics_offline_cache_usage = "%d songs · %@";
+lyrics_offline_cache_manage = "Manage Cached Lyrics";
+lyrics_cache_title = "Cached Lyrics";
+lyrics_cache_empty = "No cached lyrics yet. Lyrics are saved automatically when a song loads them.";
+lyrics_cache_clear_all = "Delete All Cached Lyrics";
+lyrics_cache_clear_confirm_title = "Delete all cached lyrics?";
+lyrics_cache_clear_confirm_message = "They will be downloaded again the next time each song plays.";
+
 karaoke_word_synced_button = "Custom Lyrics view";
 
 // UI
