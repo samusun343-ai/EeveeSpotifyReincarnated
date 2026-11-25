@@ -88,6 +88,7 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             // Since 9.1.60 the lyrics consumer is @MainActor; calling orig off-main traps.
             if url.isLyrics {
                 let originalLyrics = try? Lyrics(serializedBytes: buffer)
+                logLyricsResponseShape(buffer, context: url.path)
 
                 let semaphore = DispatchSemaphore(value: 0)
                 var customLyricsData: Data?
