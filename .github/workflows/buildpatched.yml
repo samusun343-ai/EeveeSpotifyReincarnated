@@ -113,6 +113,12 @@ jobs:
         if: ${{ inputs.ipa_url != '' }}
         continue-on-error: true
         run: |
+          # Xcode 26 splits the iOS device platform into a downloadable
+          # component; the runner image does not preinstall it, and without
+          # it xcodebuild finds no destination for -sdk iphoneos at all
+          # ("iOS 26.1 is not installed"). Download it first (no-op when
+          # already present).
+          xcodebuild -downloadPlatform iOS || true
           cd Widget
           xcodegen generate
           xcodebuild -project EeveeLyricsWidget.xcodeproj \
