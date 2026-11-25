@@ -54,6 +54,44 @@ enum LyricsRestriction: EeveeSwiftProtobuf.Enum {
 
 }
 
+/// Real `syncType` of the ColorLyricsResponse Lyrics message (field 1),
+/// determined statically from the Spotify 9.2.2 binary: the field Eevee
+/// previously modelled as a Bool is a 3-value enum on the wire (varint).
+/// Bool `true` and `.lineSynced` encode identically (1), and `false` /
+/// `.unsynced` are both the proto3 default (omitted), so this widening
+/// does not change the bytes Eevee used to emit for line-synced or
+/// unsynced lyrics.
+enum LyricsSyncType: EeveeSwiftProtobuf.Enum {
+  typealias RawValue = Int
+  case unsynced // = 0
+  case lineSynced // = 1
+  case syllableSynced // = 2
+  case UNRECOGNIZED(Int)
+
+  init() {
+    self = .unsynced
+  }
+
+  init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unsynced
+    case 1: self = .lineSynced
+    case 2: self = .syllableSynced
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  var rawValue: Int {
+    switch self {
+    case .unsynced: return 0
+    case .lineSynced: return 1
+    case .syllableSynced: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+}
+
 #if swift(>=4.2)
 
 extension LyricsRestriction: CaseIterable {
@@ -73,9 +111,18 @@ struct LyricsLine {
   // `Message` and `Message+*Additions` files in the EeveeSwiftProtobuf library for
   // methods supported on all messages.
 
+  /// Real schema field 1: `startTimeMs` (int64 on the wire; kept Int32
+  /// here as before — varint encoding is identical for any realistic
+  /// timestamp and existing behaviour must not change).
   var offsetMs: Int32 = 0
 
+  /// Real schema field 2: `words`.
   var content: String = String()
+
+  /// Real schema field 4: `endTimeMs` (int64). Spotify's client needs a
+  /// per-line end time to run its native synced-lyrics block (line
+  /// highlighting / seek); Eevee previously never sent it.
+  var endTimeMs: Int64 = 0
 
   var unknownFields = EeveeSwiftProtobuf.UnknownStorage()
 
@@ -112,33 +159,58 @@ struct LyricsTranslation {
   init() {}
 }
 
+/// Real schema message at Lyrics field 9: `alternatives` (repeated).
+/// Eevee previously modelled field 9 as a singular `translation`
+/// message; its layout (language string at 1, lines at 2) is identical
+/// to this message's first two fields, which is why translations
+/// displayed — the client was reading them as an alternative-language
+/// version all along.
+struct LyricsAlternative {
+  // EeveeSwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the EeveeSwiftProtobuf library for
+  // methods supported on all messages.
+
+  var language: String = String()
+
+  var lines: [String] = []
+
+  var isRtlLanguage: Bool = false
+
+  var unknownFields = EeveeSwiftProtobuf.UnknownStorage()
+
+  init() {}
+}
+
 struct LyricsData {
   // EeveeSwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the EeveeSwiftProtobuf library for
   // methods supported on all messages.
 
-  var timeSynchronized: Bool = false
+  /// Real schema field 1: `syncType` (enum; see LyricsSyncType).
+  var syncType: LyricsSyncType = .unsynced
 
   var lines: [LyricsLine] = []
 
+  /// Real schema field 3: `provider`.
+  var provider: String = String()
+
+  /// Real schema field 4: `providerLyricsID`.
+  var providerLyricsID: String = String()
+
+  /// Real schema field 5: `providerDisplayName`.
   var providedBy: String = String()
 
   var restriction: LyricsRestriction = .unrestricted
 
-  var translation: LyricsTranslation {
-    get {return _translation ?? LyricsTranslation()}
-    set {_translation = newValue}
-  }
-  /// Returns true if `translation` has been explicitly set.
-  var hasTranslation: Bool {return self._translation != nil}
-  /// Clears the value of `translation`. Subsequent reads from it will return its default value.
-  mutating func clearTranslation() {self._translation = nil}
+  /// Real schema field 9: `alternatives` (repeated LyricsAlternative).
+  var alternatives: [LyricsAlternative] = []
+
+  /// Real schema field 10: `language`.
+  var language: String = String()
 
   var unknownFields = EeveeSwiftProtobuf.UnknownStorage()
 
   init() {}
-
-  fileprivate var _translation: LyricsTranslation? = nil
 }
 
 struct Lyrics {
@@ -174,9 +246,11 @@ struct Lyrics {
 
 #if swift(>=5.5) && canImport(_Concurrency)
 extension LyricsRestriction: @unchecked Sendable {}
+extension LyricsSyncType: @unchecked Sendable {}
 extension LyricsLine: @unchecked Sendable {}
 extension LyricsColors: @unchecked Sendable {}
 extension LyricsTranslation: @unchecked Sendable {}
+extension LyricsAlternative: @unchecked Sendable {}
 extension LyricsData: @unchecked Sendable {}
 extension Lyrics: @unchecked Sendable {}
 #endif  // swift(>=5.5) && canImport(_Concurrency)
@@ -192,11 +266,20 @@ extension LyricsRestriction: EeveeSwiftProtobuf._ProtoNameProviding {
   ]
 }
 
+extension LyricsSyncType: EeveeSwiftProtobuf._ProtoNameProviding {
+  static let _protobuf_nameMap: EeveeSwiftProtobuf._NameMap = [
+    0: .same(proto: "UNSYNCED"),
+    1: .same(proto: "LINE_SYNCED"),
+    2: .same(proto: "SYLLABLE_SYNCED"),
+  ]
+}
+
 extension LyricsLine: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImplementationBase, EeveeSwiftProtobuf._ProtoNameProviding {
   static let protoMessageName: String = "LyricsLine"
   static let _protobuf_nameMap: EeveeSwiftProtobuf._NameMap = [
     1: .same(proto: "offsetMs"),
     2: .same(proto: "content"),
+    4: .same(proto: "endTimeMs"),
   ]
 
   mutating func decodeMessage<D: EeveeSwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -207,6 +290,7 @@ extension LyricsLine: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularInt32Field(value: &self.offsetMs) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.content) }()
+      case 4: try { try decoder.decodeSingularInt64Field(value: &self.endTimeMs) }()
       default: break
       }
     }
@@ -219,12 +303,16 @@ extension LyricsLine: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     if !self.content.isEmpty {
       try visitor.visitSingularStringField(value: self.content, fieldNumber: 2)
     }
+    if self.endTimeMs != 0 {
+      try visitor.visitSingularInt64Field(value: self.endTimeMs, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   static func ==(lhs: LyricsLine, rhs: LyricsLine) -> Bool {
     if lhs.offsetMs != rhs.offsetMs {return false}
     if lhs.content != rhs.content {return false}
+    if lhs.endTimeMs != rhs.endTimeMs {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -312,14 +400,12 @@ extension LyricsTranslation: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._Mes
   }
 }
 
-extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImplementationBase, EeveeSwiftProtobuf._ProtoNameProviding {
-  static let protoMessageName: String = "LyricsData"
+extension LyricsAlternative: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImplementationBase, EeveeSwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "LyricsAlternative"
   static let _protobuf_nameMap: EeveeSwiftProtobuf._NameMap = [
-    1: .same(proto: "timeSynchronized"),
+    1: .same(proto: "language"),
     2: .same(proto: "lines"),
-    5: .same(proto: "providedBy"),
-    14: .same(proto: "restriction"),
-    9: .same(proto: "translation"),
+    3: .same(proto: "isRtlLanguage"),
   ]
 
   mutating func decodeMessage<D: EeveeSwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -328,10 +414,62 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBoolField(value: &self.timeSynchronized) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.language) }()
+      case 2: try { try decoder.decodeRepeatedStringField(value: &self.lines) }()
+      case 3: try { try decoder.decodeSingularBoolField(value: &self.isRtlLanguage) }()
+      default: break
+      }
+    }
+  }
+
+  func traverse<V: EeveeSwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.language.isEmpty {
+      try visitor.visitSingularStringField(value: self.language, fieldNumber: 1)
+    }
+    if !self.lines.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.lines, fieldNumber: 2)
+    }
+    if self.isRtlLanguage != false {
+      try visitor.visitSingularBoolField(value: self.isRtlLanguage, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  static func ==(lhs: LyricsAlternative, rhs: LyricsAlternative) -> Bool {
+    if lhs.language != rhs.language {return false}
+    if lhs.lines != rhs.lines {return false}
+    if lhs.isRtlLanguage != rhs.isRtlLanguage {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImplementationBase, EeveeSwiftProtobuf._ProtoNameProviding {
+  static let protoMessageName: String = "LyricsData"
+  static let _protobuf_nameMap: EeveeSwiftProtobuf._NameMap = [
+    1: .same(proto: "syncType"),
+    2: .same(proto: "lines"),
+    3: .same(proto: "provider"),
+    4: .same(proto: "providerLyricsID"),
+    5: .same(proto: "providedBy"),
+    14: .same(proto: "restriction"),
+    9: .same(proto: "alternatives"),
+    10: .same(proto: "language"),
+  ]
+
+  mutating func decodeMessage<D: EeveeSwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.syncType) }()
       case 2: try { try decoder.decodeRepeatedMessageField(value: &self.lines) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.provider) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.providerLyricsID) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.providedBy) }()
-      case 9: try { try decoder.decodeSingularMessageField(value: &self._translation) }()
+      case 9: try { try decoder.decodeRepeatedMessageField(value: &self.alternatives) }()
+      case 10: try { try decoder.decodeSingularStringField(value: &self.language) }()
       case 14: try { try decoder.decodeSingularEnumField(value: &self.restriction) }()
       default: break
       }
@@ -343,18 +481,27 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if self.timeSynchronized != false {
-      try visitor.visitSingularBoolField(value: self.timeSynchronized, fieldNumber: 1)
+    if self.syncType != .unsynced {
+      try visitor.visitSingularEnumField(value: self.syncType, fieldNumber: 1)
     }
     if !self.lines.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.lines, fieldNumber: 2)
     }
+    if !self.provider.isEmpty {
+      try visitor.visitSingularStringField(value: self.provider, fieldNumber: 3)
+    }
+    if !self.providerLyricsID.isEmpty {
+      try visitor.visitSingularStringField(value: self.providerLyricsID, fieldNumber: 4)
+    }
     if !self.providedBy.isEmpty {
       try visitor.visitSingularStringField(value: self.providedBy, fieldNumber: 5)
     }
-    try { if let v = self._translation {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
-    } }()
+    if !self.alternatives.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.alternatives, fieldNumber: 9)
+    }
+    if !self.language.isEmpty {
+      try visitor.visitSingularStringField(value: self.language, fieldNumber: 10)
+    }
     if self.restriction != .unrestricted {
       try visitor.visitSingularEnumField(value: self.restriction, fieldNumber: 14)
     }
@@ -362,11 +509,14 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
   }
 
   static func ==(lhs: LyricsData, rhs: LyricsData) -> Bool {
-    if lhs.timeSynchronized != rhs.timeSynchronized {return false}
+    if lhs.syncType != rhs.syncType {return false}
     if lhs.lines != rhs.lines {return false}
+    if lhs.provider != rhs.provider {return false}
+    if lhs.providerLyricsID != rhs.providerLyricsID {return false}
     if lhs.providedBy != rhs.providedBy {return false}
     if lhs.restriction != rhs.restriction {return false}
-    if lhs._translation != rhs._translation {return false}
+    if lhs.alternatives != rhs.alternatives {return false}
+    if lhs.language != rhs.language {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

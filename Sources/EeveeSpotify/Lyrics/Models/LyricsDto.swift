@@ -29,8 +29,11 @@ struct LyricsDto {
 
     func toSpotifyLyricsData(source: String) -> LyricsData {
         var lyricsData = LyricsData.with {
-            $0.timeSynchronized = timeSynced
+            // Real response schema field 1 is a 3-value syncType enum;
+            // .lineSynced (1) encodes exactly like the old Bool `true`.
+            $0.syncType = timeSynced ? .lineSynced : .unsynced
             $0.restriction = .unrestricted
+            $0.provider = providerCredit ?? source
             $0.providedBy = "\(providerCredit ?? source) (EeveeSpotify)"
         }
         
@@ -50,24 +53,46 @@ struct LyricsDto {
             ]
         }
         else {
-            let sortedLines = lines.sorted { 
+            let sortedLines = lines.sorted {
                 ($0.offsetMs ?? 0) < ($1.offsetMs ?? 0)
             }
-            lyricsData.lines = sortedLines.map { line in
-                LyricsLine.with {
+            lyricsData.lines = sortedLines.enumerated().map { index, line in
+                let startMs = line.offsetMs ?? 0
+                // Spotify's native lyrics block needs a per-line end time
+                // (endTimeMs, schema field 4) to highlight and seek.
+                // Derive it exactly like the karaoke side does
+                // (KaraokeLyricsDto.lineSynced): the next line's start —
+                // searching the full sorted list, so a trailing empty
+                // end-marker line still terminates the previous line —
+                // or start + 4s for the final line.
+                var endTimeMs: Int64 = 0
+                if timeSynced {
+                    let nextStartMs = sortedLines[(index + 1)...]
+                        .first { ($0.offsetMs ?? 0) > startMs }
+                        .map { $0.offsetMs ?? 0 }
+                    endTimeMs = Int64(nextStartMs ?? startMs + 4000)
+                }
+                return LyricsLine.with {
                     $0.content = (shouldRomanize && romanization == .canBeRomanized)
                         ? line.content.applyingTransform(.toLatin, reverse: false)!
                         : line.content
-                    $0.offsetMs = Int32(line.offsetMs ?? 0)
+                    $0.offsetMs = Int32(startMs)
+                    $0.endTimeMs = endTimeMs
                 }
             }
         }
         
         if let translation = translation {
-            lyricsData.translation = LyricsTranslation.with {
-                $0.languageCode = translation.languageCode
-                $0.lines = translation.lines
-            }
+            // Real schema field 9 is `alternatives` (repeated): the
+            // client reads a translation as an alternative-language
+            // version of the lyrics. The wire layout is unchanged from
+            // the previous singular `translation` modelling.
+            lyricsData.alternatives = [
+                LyricsAlternative.with {
+                    $0.language = translation.languageCode
+                    $0.lines = translation.lines
+                }
+            ]
         }
         
         return lyricsData
