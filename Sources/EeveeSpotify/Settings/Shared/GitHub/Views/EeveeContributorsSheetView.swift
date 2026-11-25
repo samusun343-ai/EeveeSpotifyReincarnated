@@ -147,21 +147,21 @@ struct EeveeContributorsSheetView: View {
                 Image(systemName: "exclamationmark.triangle")
                     .font(.largeTitle)
                     .foregroundColor(.orange)
-                Text("Failed to load contributors")
+                Text("contributors_load_failed".localized)
                     .font(.headline)
                 Text(error)
                     .font(.caption)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
-                Button("Retry") {
+                Button("retry".localized) {
                     isLoading = true
                     errorMessage = nil
                     loadContributors()
                 }
             }
         } else if sections.isEmpty {
-            Text("No contributors found")
+            Text("contributors_not_found".localized)
                 .foregroundColor(.gray)
         } else {
             contributorsList

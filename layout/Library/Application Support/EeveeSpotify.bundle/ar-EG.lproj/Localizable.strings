@@ -46,6 +46,7 @@ Genius: يقدم أفضل كلمات الأغاني بأفضل جودة، ويو
 LRCLIB: الخدمة الأكثر انفتاحًا، وتقدم كلمات الأغاني المتزامنة زمنيًا. ومع ذلك، فهي تفتقر إلى كلمات العديد من الأغاني.";
 lyrics_additional_info = "إذا تعذر على EeveeSpotify العثور على أغنية أو معالجة كلمات الأغنية، فسترى رسالة \”تعذر تحميل كلمات هذه الأغنية\“. قد تكون كلمات الأغاني خاطئة لبعض الأغاني عند استخدام Genius بسبب طريقة بحث القرص عن الأغاني. لقد جعلتها تعمل في معظم الحالات.";
 petitlyrics_description = "PetitLyrics: يقدم الكثير من الكلمات اليابانية المتزامنة زمنياً وبعض الكلمات العالمية.";
+lrcred_liriqo_description = "lrc.red + LRCLIB + LiriQo: مصدر من ثلاث مراحل. يرد lrc.red أولًا ويقدّم كلمات متزامنة بالسطر والكلمة بسرعة ومخزّنة مؤقتًا على CDN؛ وإذا لم يكن لديه سوى نص عادي أو لا شيء لأغنية ما، يُسأل LRCLIB بعد ذلك، وتكون LiriQo — التي تجمّع 11 موفّرًا — هي المرحلة الأخيرة، مع كلمات متزامنة بالكلمة عند توفّرها.";
 
 genius_fallback = "الاحتياطي العبقري";
 genius_fallback_description = "تحميل كلمات الأغاني من Genius إذا كانت هناك مشكلة في %@.";
@@ -57,6 +58,17 @@ hide_lyrics_on_error_description = "出現錯誤時（不包含回退）隱藏�
 
 romanized_lyrics = "كلمات مكتوبة بالحروف اللاتينية";
 romanized_lyrics_description = "عرض كلمات الأغاني بالحروف اللاتينية لليابانية والكورية والصينية.";
+lyrics_offline_cache_section = "التخزين المؤقت دون اتصال";
+lyrics_offline_cache = "تخزين الكلمات مؤقتًا للاستخدام دون اتصال";
+lyrics_offline_cache_description = "تُحفظ الكلمات على هذا الجهاز بعد تحميلها، لذا عند تشغيل أغنية مرة أخرى تظهر كلماتها فورًا — حتى بدون اتصال، ودون سؤال الموفّرين ذوي حدود المعدّل مرة أخرى. تُحفظ الإدخالات حسب مصدر الكلمات، وتُحذف الأقدم تلقائيًا عندما يتجاوز التخزين المؤقت 300 أغنية أو 16 MB.";
+lyrics_offline_cache_usage_label = "الكلمات المخزّنة مؤقتًا";
+lyrics_offline_cache_usage = "%d أغنية · %@";
+lyrics_offline_cache_manage = "إدارة الكلمات المخزّنة مؤقتًا";
+lyrics_cache_title = "الكلمات المخزّنة مؤقتًا";
+lyrics_cache_empty = "لا توجد كلمات مخزّنة مؤقتًا بعد. تُحفظ الكلمات تلقائيًا عندما تحمّلها الأغنية.";
+lyrics_cache_clear_all = "حذف كل الكلمات المخزّنة مؤقتًا";
+lyrics_cache_clear_confirm_title = "حذف كل الكلمات المخزّنة مؤقتًا؟";
+lyrics_cache_clear_confirm_message = "سيتم تنزيلها مرة أخرى في المرة القادمة التي تُشغَّل فيها كل أغنية.";
 
 // UI
 
@@ -88,6 +100,8 @@ have_premium_popup = "يبدو أن لديك اشتراك Premium نشط، لذ�
 high_audio_quality_popup = "جودة الصوت العالية جدًا من جانب الخادم وغير متوفرة مع هذا التعديل.";
 playlist_downloading_popup = "تنزيل قائمة التشغيل الأصلية من جانب الخادم وغير متاح مع هذا التعديل. ومع ذلك يمكنك تنزيل حلقات البودكاست وقوائم التشغيل المحلية.";
 download_local_playlist = "تنزيل قائمة التشغيل المحلية";
+local_playlist_download_button = "إظهار زر تنزيل قائمة التشغيل";
+local_playlist_download_setting_hint = "يقوم زر قائمة التشغيل هذا بمزامنة الملفات المحلية فقط عبر Wi-Fi. يمكنك إخفاؤه من إعدادات EeveeSpotify ← متنوعات ← إظهار زر تنزيل قائمة التشغيل.";
 
 //
 
@@ -179,6 +193,7 @@ action_auto = "تلقائي";
 draftsTitle = "البلاغات والمسودات";
 errorNoPodcats = "مفيش بودكاست شغال دلوقتي";
 markSegment = "علم على مقطع في الحلقة الحالية";
+markSegmentStartSet = "تم تعيين البداية عند %@ ث · افتح مرة أخرى لتعيين النهاية";
 advancedTitle = "إعدادات متقدمة";
 howToUseTitle = "طريقة الاستخدام";
 creditsTitle = "شكر وتقدير";
@@ -481,6 +496,9 @@ appearance_pages = "الصفحات";
 tab_bar_subtitle = "الترتيب وتبويب البدء والتبويبات المخصّصة";
 lyrics_written_by = "كتابة:";
 lyrics_provided_by = "الكلمات مقدَّمة من";
+lyrics_timing_offset_section = "توقيت الكلمات";
+lyrics_timing_offset_global = "كل المقاطع";
+lyrics_timing_offset_description = "يقدّم الكلمات المتزامنة أو يؤخّرها؛ القيم الموجبة تُظهرها لاحقًا. يمكن تصحيح مقطع واحد من عرض الكلمات المخصّصة أثناء تشغيله.";
 karaoke_section = "عرض الكلمات المخصّص";
 karaoke_section_footer = "الاتجاه المعكوس بيخلّي السطور تمشي من تحت لفوق، والسطر الحالي بيبقى أوطى في الشاشة. شدّة التمويه بتتحكم في قد إيه السطور غير الحالية تبقى مموّهة.";
 karaoke_alignment = "محاذاة الكلمات";
@@ -498,6 +516,7 @@ karaoke_word_synced_button = "عرض الكلمات المخصّص";
 debug_logging = "تسجيل التصحيح";
 karaoke_enabled = "عرض الكلمات المخصّص";
 karaoke_blur_intensity = "شدّة التمويه";
+karaoke_lock_screen_line = "السطر الحالي على شاشة القفل (تجريبي)";
 
 /* MARK: Added to match en.lproj */
 
@@ -505,9 +524,18 @@ miscellaneous = "متنوعات";
 clean_share_links = "تنظيف روابط المشاركة";
 clean_share_links_description = "يزيل معاملات التتبع من الروابط المشاركة.";
 developer_note = "ملاحظة المطوّر";
+retry = "إعادة المحاولة";
+app_icon_not_supported = "الأيقونات البديلة غير مدعومة على هذا الجهاز.";
+developer_note_load_failed = "فشل تحميل ملاحظة المطوّر";
+developer_note_not_found = "لم يتم العثور على ملاحظة المطوّر";
+contributors_load_failed = "فشل تحميل المساهمين";
+contributors_not_found = "لم يتم العثور على مساهمين";
+artist_downloads = "تنزيلات الفنان";
 prettifyIconNames = "تجميل أسماء الأيقونات";
 prettifyIconNamesDescription = "يحوّل الشرطات السفلية والواصلات وصيغة camelCase إلى مسافات";
 spicylyrics_api_key_placeholder = "أدخل مفتاح عميل Spicy";
 glass_lyrics_view = "عرض الكلمات المخصّص";
 lyrics_source_restart_popup = "أعد تشغيل Spotify ليُستخدم مصدر الكلمات الجديد في كل مكان. الأغاني التي شغّلتها سابقًا تحتفظ بكلماتها القديمة حتى ذلك الحين.";
 restart_later = "لاحقًا";
+manage_downloads = "إدارة التنزيلات";
+manage_downloads_subtitle = "تنزيلات Pixie دون اتصال";
