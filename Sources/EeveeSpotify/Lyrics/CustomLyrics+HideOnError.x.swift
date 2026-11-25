@@ -31,9 +31,9 @@ class ErrorViewControllerHook: ClassHook<UIViewController> {
             // collectionView.dataSource. If the lyrics provider isn't among
             // the active providers, or the collection view has no data source
             // yet, there is nothing to hide — bail out instead of crashing.
-            guard let lyricsProviderIndex = dataSource.activeProviders.firstIndex {
+            guard let lyricsProviderIndex = dataSource.activeProviders.firstIndex(where: {
                 NSStringFromClass(type(of: $0)) == HookTargetNameHelper.lyricsScrollProvider
-            } else {
+            }) else {
                 return
             }
             
