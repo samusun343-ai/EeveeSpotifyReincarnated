@@ -42,7 +42,12 @@ class LyricsFullscreenViewControllerHook: ClassHook<UIViewController> {
         
         let headerView = Ivars<UIView>(target.view).headerView
         
-        if let reportButton = headerView.subviews(matching: "EncoreButton")[1] as? UIButton {
+        // The report button is the second EncoreButton in the header. If a
+        // layout change ever leaves fewer than two, leave the header as-is
+        // instead of indexing out of bounds.
+        let headerButtons = headerView.subviews(matching: "EncoreButton")
+        
+        if headerButtons.count > 1, let reportButton = headerButtons[1] as? UIButton {
             reportButton.isEnabled = false
         }
     }
