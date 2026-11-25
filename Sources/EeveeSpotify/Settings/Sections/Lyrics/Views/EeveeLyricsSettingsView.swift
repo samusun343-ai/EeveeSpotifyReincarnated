@@ -3,6 +3,7 @@ import SwiftUI
 struct EeveeLyricsSettingsView: View {
     @StateObject var viewModel = EeveeLyricsSettingsViewModel()
     @State private var karaokeOptions: KaraokeOptions = UserDefaults.karaokeOptions
+    @State private var timingOffsets: LyricsTimingOffsets = UserDefaults.lyricsTimingOffsets
     @State var spicyLyricsApiKey: String = UserDefaults.spicyLyricsApiKey
 
     var body: some View {
@@ -16,6 +17,7 @@ struct EeveeLyricsSettingsView: View {
                 
                 hideOnErrorSection()
                 romanizedLyricsSection()
+                lyricsTimingOffsetSection()
                 
                 if viewModel.lyricsSource.supportsCustomLyricsView {
                     karaokeAppearanceSection()
@@ -28,6 +30,7 @@ struct EeveeLyricsSettingsView: View {
         .eeveeSettingsStyle()
         .animation(.default, value: viewModel.animationValues)
         .onChange(of: karaokeOptions) { UserDefaults.karaokeOptions = $0 }
+        .onChange(of: timingOffsets) { UserDefaults.lyricsTimingOffsets = $0 }
         .onChange(of: spicyLyricsApiKey) { UserDefaults.spicyLyricsApiKey = $0 }
     }
 
@@ -97,6 +100,23 @@ struct EeveeLyricsSettingsView: View {
         }
     }
     
+    @ViewBuilder private func lyricsTimingOffsetSection() -> some View {
+        Section {
+            Stepper(value: $timingOffsets.globalMs, in: -2_000...2_000, step: 100) {
+                HStack {
+                    Text("lyrics_timing_offset_global".localized)
+                    Spacer()
+                    Text(LyricsTimingOffsets.format(timingOffsets.globalMs))
+                        .foregroundColor(.gray)
+                }
+            }
+        } header: {
+            Text("lyrics_timing_offset_section".localized)
+        } footer: {
+            Text("lyrics_timing_offset_description".localized)
+        }
+    }
+
     @ViewBuilder private func hideOnErrorSection() -> some View {
         Section {
             Toggle(

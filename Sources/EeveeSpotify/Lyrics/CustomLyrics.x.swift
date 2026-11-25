@@ -173,8 +173,15 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced)")
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
 
+    // The user's timing correction applies to the native lyrics view only.
+    // The karaoke overlay compensates on the playback-position side (see
+    // KaraokeLyricsView), so the DTO handed to it above stays unshifted.
+    let timingOffsetMs = UserDefaults.lyricsTimingOffsets.effectiveMs(forTrackId: searchQuery.spotifyTrackId)
+
     let lyrics = Lyrics.with {
-        $0.data = lyricsDto.toSpotifyLyricsData(source: source.description)
+        $0.data = lyricsDto
+            .applyingTimingOffset(timingOffsetMs)
+            .toSpotifyLyricsData(source: source.description)
     }
     
     return lyrics
@@ -267,10 +274,17 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
 
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
 
+    // Same timing-correction split as in loadCustomLyricsForTrackId: only
+    // the native view's payload is shifted; the karaoke overlay compensates
+    // on its own side.
+    let timingOffsetMs = UserDefaults.lyricsTimingOffsets.effectiveMs(forTrackId: searchQuery.spotifyTrackId)
+
     let lyrics = Lyrics.with {
-        $0.data = lyricsDto.toSpotifyLyricsData(source: source.description)
+        $0.data = lyricsDto
+            .applyingTimingOffset(timingOffsetMs)
+            .toSpotifyLyricsData(source: source.description)
     }
-    
+
     return lyrics
 }
 

@@ -25,6 +25,9 @@ struct KaraokeLyricsView: View {
                         .id(model.trackId)
                 }
                 closeButton
+                if model.lyrics != nil {
+                    timingOffsetControls
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -32,7 +35,11 @@ struct KaraokeLyricsView: View {
 
     private func content(lyrics: KaraokeLyricsDto, layouts: [KaraokeLineLayout], screenWidth: CGFloat) -> some View {
         TimelineView(.periodic(from: .now, by: 1.0 / 30.0)) { _ in
-            let currentMs = KaraokePlaybackTracker.shared.currentPositionMs()
+            // The user's timing correction shifts the position this view
+            // compares line timestamps against, instead of rewriting the
+            // stored lyrics: a positive offset therefore shows every line
+            // later, and overlay adjustments take effect on the next frame.
+            let currentMs = KaraokePlaybackTracker.shared.currentPositionMs() - model.timingOffsetMs
 
             KaraokeScrollingLines(
                 lyrics: lyrics,
@@ -53,6 +60,42 @@ struct KaraokeLyricsView: View {
             }
         }
         return nil
+    }
+
+    /// Per-track lyrics timing correction: step the current song's lyrics
+    /// ±0.1 s at a time while watching them, or clear the song's own value.
+    /// The label shows the correction in effect (global + this track's).
+    @ViewBuilder private var timingOffsetControls: some View {
+        if model.trackId != nil {
+            VStack {
+                Spacer()
+
+                HStack(spacing: 14) {
+                    Button { model.adjustTimingOffset(by: -100) } label: {
+                        Text("−0.1s")
+                    }
+
+                    Text(LyricsTimingOffsets.format(model.timingOffsetMs))
+                        .frame(minWidth: 52)
+
+                    Button { model.adjustTimingOffset(by: 100) } label: {
+                        Text("+0.1s")
+                    }
+
+                    if model.trackTimingOffsetMs != 0 {
+                        Button { model.resetTimingOffset() } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                    }
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white.opacity(0.9))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(Color.white.opacity(0.12)))
+                .padding(.bottom, 34)
+            }
+        }
     }
 
     @ViewBuilder private var closeButtonBackground: some View {

@@ -7,6 +7,26 @@ struct LyricsDto {
     var translation: LyricsTranslationDto?
     var providerCredit: String? = nil
     
+    /// Returns a copy with every line's timestamp shifted by `offsetMs`
+    /// (clamped at zero), applying the user's timing correction for the
+    /// native lyrics view. The karaoke overlay compensates on the
+    /// playback-position side instead (see KaraokeLyricsView), so DTOs
+    /// handed to it — directly or via `KaraokeLyricsDto.lineSynced` —
+    /// must stay unshifted.
+    func applyingTimingOffset(_ offsetMs: Int) -> LyricsDto {
+        guard offsetMs != 0 else { return self }
+
+        var copy = self
+        copy.lines = lines.map { line in
+            var line = line
+            if let offset = line.offsetMs {
+                line.offsetMs = max(0, offset + offsetMs)
+            }
+            return line
+        }
+        return copy
+    }
+
     func toSpotifyLyricsData(source: String) -> LyricsData {
         var lyricsData = LyricsData.with {
             $0.timeSynchronized = timeSynced
