@@ -19,12 +19,19 @@ func modifyRemoteConfiguration(_ configuration: inout UcsResponse) {
             liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
         }
 
-        configuration.resolve.configuration = try! BundleHelper.shared.resolveConfiguration()
+        // If the bundled snapshot can't be resolved, keep Spotify's own
+        // configuration instead of crashing mid-modification; the targeted
+        // changes in modifyAssignedValues below still apply.
+        if let resolvedConfiguration = try? BundleHelper.shared.resolveConfiguration() {
+            configuration.resolve.configuration = resolvedConfiguration
 
-        configuration.assignedValues.removeAll {
-            liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+            configuration.assignedValues.removeAll {
+                liveMessagingAssignmentKeys.contains("\($0.propertyID.scope).\($0.propertyID.name)")
+            }
+            configuration.assignedValues.append(contentsOf: liveMessagingAssignments)
+        } else {
+            writeDebugLog("[RemoteConfig] resolveConfiguration failed — skipping configuration overwrite")
         }
-        configuration.assignedValues.append(contentsOf: liveMessagingAssignments)
     }
 
     // Apply targeted changes after an optional full overwrite. Doing it
