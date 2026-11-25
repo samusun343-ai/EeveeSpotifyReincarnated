@@ -300,6 +300,15 @@ private var prefetchedResult: PrefetchedLyrics?
 // Track ID currently being prefetched, to avoid duplicate background fetches.
 private var prefetchingTrackId: String?
 
+/// Coordinates the bounded wait in getLyricsDataForCurrentTrack with the
+/// fetch it waits on: if the fetch finishes after the caller has already
+/// given up and fallen back to Spotify's own response, the result is handed
+/// over via storeLateLyricsResult instead of being dropped.
+private final class LyricsFetchHandoff {
+    let lock = NSLock()
+    var callerGaveUp = false
+}
+
 // Guards both prefetch variables: the result is produced on a global queue,
 // consumed on Spotify's own request threads, and invalidated from the
 // settings UI, so every check-and-set sequence below runs under this lock.
@@ -400,6 +409,93 @@ func emptyLyricsData(originalLyrics: Lyrics? = nil) -> Data? {
     return try? lyrics.serializedData()
 }
 
+/// Hands over the result of a fetch that outlived the bounded wait in
+/// getLyricsDataForCurrentTrack. The Now Playing lyrics card is fed by a
+/// one-shot /color-lyrics response substitution: once the caller fell back
+/// to Spotify's own response, the card's content is settled for that
+/// request, and the finished lyrics used to be dropped on the floor — they
+/// reached KaraokeLyricsStore (so the custom lyrics button and the one-line
+/// bar appeared), but nothing ever served them to the card. Storing the
+/// colored, serialized payload as the track's prefetched result means the
+/// next lyrics request for the same track (re-entering Now Playing,
+/// replaying the track, a queue revisit) is served instantly, and the Now
+/// Playing scroll view is nudged to re-render in case its lyrics provider
+/// re-evaluates on reload.
+private func storeLateLyricsResult(_ fetched: Lyrics, trackId: String, source: LyricsSource, originalLyrics: Lyrics?) {
+    // The provider may have been switched while this was in flight.
+    guard UserDefaults.lyricsSource == source else {
+        writeDebugLog("[Lyrics] late result for \(trackId) discarded: provider changed")
+        return
+    }
+
+    var lyrics = fetched
+
+    // Same coloring as the on-time path in getLyricsDataForCurrentTrack.
+    let lyricsColorsSettings = UserDefaults.lyricsColors
+
+    if lyricsColorsSettings.displayOriginalColors, let originalLyrics = originalLyrics {
+        lyrics.colors = originalLyrics.colors
+    }
+    else {
+        var color: Color
+
+        if lyricsColorsSettings.useStaticColor {
+            color = Color(hex: lyricsColorsSettings.staticColor)
+        }
+        else if let uiColor = backgroundViewModel?.color() {
+            color = Color(uiColor)
+                .normalized(lyricsColorsSettings.normalizationFactor)
+        }
+        else {
+            color = Color.gray
+        }
+
+        lyrics.colors = LyricsColors.with {
+            $0.backgroundColor = color.uInt32
+            $0.lineColor = Color.black.uInt32
+            $0.activeLineColor = Color.white.uInt32
+        }
+    }
+
+    guard let data = try? lyrics.serializedData() else { return }
+
+    prefetchStateLock.lock()
+    // Single slot, same rule as the prefetch path: never evict another
+    // track's waiting result for this one.
+    let slotFree = prefetchedResult == nil || prefetchedResult?.trackId == trackId
+    if slotFree {
+        prefetchedResult = PrefetchedLyrics(trackId: trackId, source: source, data: data)
+    }
+    prefetchStateLock.unlock()
+
+    guard slotFree else {
+        writeDebugLog("[Lyrics] late result for \(trackId) not stored: a result for another track is waiting")
+        return
+    }
+
+    writeDebugLog("[Lyrics] late result for \(trackId) stored; will be served on the next lyrics request for this track")
+
+    // If this is the track on screen, ask the Now Playing scroll view to
+    // re-render (the same reloadData the HideOnError path performs after
+    // mutating providers). If Spotify's lyrics provider keeps the state it
+    // already settled on, this is a no-op and the stored result still lands
+    // on the next natural re-request. A nil reported track ID means the
+    // player observer isn't attached (9.1.x), where the lyrics request
+    // itself is the current-track signal — assume this is the track, as
+    // loadCustomLyricsForTrackId does for metadata.
+    let isCurrentTrack = KaraokePlaybackTracker.shared.playerReportedTrackId().map { $0 == trackId } ?? true
+    guard isCurrentTrack else { return }
+
+    DispatchQueue.main.async {
+        if let controller = nowPlayingScrollViewController {
+            controller.collectionView().reloadData()
+        }
+        else if let controller = npvScrollViewController {
+            controller.collectionView().reloadData()
+        }
+    }
+}
+
 func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics? = nil) throws -> Data {
     
     // track id from URL path; player objects are nil on 9.1.6
@@ -445,24 +541,56 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     // beyond this.
     //
     // The underlying fetch keeps running in the background past the
-    // timeout — its result still reaches KaraokeLyricsStore (and, via
-    // whatever the next prefetch/fetch for the same track does,
-    // prefetchedResult) through loadCustomLyricsForTrackId itself; only
-    // THIS caller stops waiting on it. A slow fetch isn't wasted, it's just
-    // no longer something Spotify's own thread sits through.
+    // timeout. Its result still reaches KaraokeLyricsStore through
+    // loadCustomLyricsForTrackId itself, and the handoff below stores the
+    // finished payload as this track's prefetched result (see
+    // storeLateLyricsResult), so the Now Playing card — whose content was
+    // already settled by the fallback response this caller returns — is
+    // served on its next request for the track. Only THIS caller stops
+    // waiting; a slow fetch isn't wasted, it's just no longer something
+    // Spotify's own thread sits through.
     let fallbackTimeout: TimeInterval = 12.0
     let semaphore = DispatchSemaphore(value: 0)
     var fetchedLyrics: Lyrics?
     var fetchedError: Error?
+    let handoff = LyricsFetchHandoff()
+    let sourceAtStart = UserDefaults.lyricsSource
     DispatchQueue.global(qos: .userInitiated).async {
         do {
-            fetchedLyrics = try loadCustomLyricsForTrackId(trackIdentifier)
+            let lyrics = try loadCustomLyricsForTrackId(trackIdentifier)
+
+            handoff.lock.lock()
+            let callerGaveUp = handoff.callerGaveUp
+            if !callerGaveUp {
+                fetchedLyrics = lyrics
+            }
+            handoff.lock.unlock()
+
+            if callerGaveUp {
+                storeLateLyricsResult(lyrics, trackId: trackIdentifier, source: sourceAtStart, originalLyrics: originalLyrics)
+            }
         } catch {
-            fetchedError = error
+            handoff.lock.lock()
+            if !handoff.callerGaveUp {
+                fetchedError = error
+            }
+            handoff.lock.unlock()
         }
         semaphore.signal()
     }
     guard semaphore.wait(timeout: .now() + fallbackTimeout) == .success else {
+        handoff.lock.lock()
+        handoff.callerGaveUp = true
+        let finishedInRaceWindow = fetchedLyrics
+        handoff.lock.unlock()
+
+        // The fetch completed in the same instant the wait expired — its
+        // closure saw a caller that hadn't given up yet, so the handoff is
+        // this caller's job.
+        if let finishedInRaceWindow = finishedInRaceWindow {
+            storeLateLyricsResult(finishedInRaceWindow, trackId: trackIdentifier, source: sourceAtStart, originalLyrics: originalLyrics)
+        }
+
         writeDebugLog("[Lyrics] \(trackIdentifier): \(UserDefaults.lyricsSource.description) took longer than \(fallbackTimeout)s — Spotify's own lyrics are used for this song")
         throw LyricsError.noSuchSong
     }
