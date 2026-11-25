@@ -12,9 +12,21 @@ import Foundation
 /// stage 1 only had untimed (plain) lyrics: a synced LiriQo result then
 /// replaces the plain text, while any LiriQo failure keeps it. LiriQo
 /// outcomes are cached in memory for the session (LRU, 100 entries) so
-/// repeat plays never re-ask. If both stages fail, the error propagates
-/// and the existing Genius fallback in CustomLyrics takes over as the
-/// final fallback.
+/// repeat plays never re-ask — but only definitive outcomes are cached:
+/// a 429, a server error or a network failure is never recorded as a
+/// miss, so a rate-limited track is asked about again on the next play
+/// instead of staying lyric-less for the whole session. If both stages
+/// fail, the error propagates and the existing Genius fallback in
+/// CustomLyrics takes over as the final fallback.
+///
+/// Where an upstream supplies a translation that can be aligned to the
+/// lyric lines with certainty — TTML translations keyed by line, or a
+/// timestamped translation whose timestamps match the lines exactly —
+/// it is revived into `LyricsDto.translation`; the display plumbing for
+/// it (LyricsDto.toSpotifyLyricsData) was never removed. Plain-text
+/// translations whose line count differs from the body (NetEase's, which
+/// skips untranslated credit lines) are deliberately not used: a shifted
+/// translation is worse than none.
 ///
 /// lrc.red's terms require an identifying User-Agent and a visible
 /// credit, so every request carries the app name + repository link and
@@ -116,6 +128,27 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return (data, statusCode)
     }
 
+    /// Logs a non-200 response with its failure category distinguished —
+    /// rate limited (429), server busy (503), not found (404), anything
+    /// else by bare status — so field reports ("this one song shows no
+    /// lyrics") can be told apart from logs alone.
+    private func logHttpFailure(logTag: String, statusCode: Int, context: String) {
+        let category: String
+
+        switch statusCode {
+        case 429:
+            category = "rate limited (HTTP 429)"
+        case 503:
+            category = "server busy (HTTP 503)"
+        case 404:
+            category = "not found (HTTP 404)"
+        default:
+            category = "HTTP \(statusCode)"
+        }
+
+        writeDebugLog("[\(logTag)] \(context) failed: \(category)")
+    }
+
     // MARK: - LyricsRepository
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
@@ -143,14 +176,14 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         if let lrcRedPlainLyrics {
-            if let upgraded = try? getLiriQoLyrics(query), upgraded.timeSynced, !upgraded.lines.isEmpty {
+            if let upgraded = try? getLiriQoLyrics(query, options: options), upgraded.timeSynced, !upgraded.lines.isEmpty {
                 return upgraded
             }
 
             return lrcRedPlainLyrics
         }
 
-        return try getLiriQoLyrics(query)
+        return try getLiriQoLyrics(query, options: options)
     }
 
     // MARK: - Stage 1: lrc.red
@@ -208,6 +241,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         let (data, statusCode) = try perform(stringUrl, session: lrcRedSession, logTag: "lrc.red")
 
         guard statusCode == 200 else {
+            logHttpFailure(logTag: "lrc.red", statusCode: statusCode, context: "Search for \(title)/\(artist)")
             throw LyricsError.noSuchSong
         }
 
@@ -257,6 +291,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         )
 
         guard statusCode == 200 else {
+            logHttpFailure(logTag: "lrc.red", statusCode: statusCode, context: "Track metadata for \(isrc)")
             throw LyricsError.noSuchSong
         }
 
@@ -276,7 +311,12 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         let lrcUrl = track.files?.lrc ?? "\(Self.lrcRedBaseUrl)/s/\(isrc).lrc"
         let (data, statusCode) = try perform(lrcUrl, session: lrcRedSession, logTag: "lrc.red")
 
-        guard statusCode == 200, let lrcText = String(data: data, encoding: .utf8) else {
+        guard statusCode == 200 else {
+            logHttpFailure(logTag: "lrc.red", statusCode: statusCode, context: "Synced lyrics file for \(isrc)")
+            throw LyricsError.noSuchSong
+        }
+
+        guard let lrcText = String(data: data, encoding: .utf8) else {
             throw LyricsError.noSuchSong
         }
 
@@ -324,6 +364,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
         var lines: [LyricsLineDto] = []
         var karaokeLines: [KaraokeLineDto] = []
+        let hasWordTimedLines = timedLines.contains { !$0.words.isEmpty }
 
         for (index, timedLine) in timedLines.enumerated() {
             lines.append(LyricsLineDto(
@@ -331,32 +372,60 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 offsetMs: timedLine.startMs
             ))
 
-            guard !timedLine.words.isEmpty else { continue }
-
             let lineEndMs = index + 1 < timedLines.count
                 ? timedLines[index + 1].startMs
                 : timedLine.startMs + 4000
 
-            var syllables: [KaraokeSyllableDto] = []
+            if !timedLine.words.isEmpty {
+                var syllables: [KaraokeSyllableDto] = []
 
-            for (wordIndex, word) in timedLine.words.enumerated() {
-                let wordEndMs = wordIndex + 1 < timedLine.words.count
-                    ? timedLine.words[wordIndex + 1].startMs
-                    : lineEndMs
+                for (wordIndex, word) in timedLine.words.enumerated() {
+                    let wordEndMs = wordIndex + 1 < timedLine.words.count
+                        ? timedLine.words[wordIndex + 1].startMs
+                        : lineEndMs
 
-                syllables.append(KaraokeSyllableDto(
-                    text: word.text,
-                    startMs: word.startMs,
-                    endMs: wordEndMs,
-                    isPartOfWord: false
+                    syllables.append(KaraokeSyllableDto(
+                        text: word.text,
+                        startMs: word.startMs,
+                        endMs: wordEndMs,
+                        isPartOfWord: false
+                    ))
+                }
+
+                karaokeLines.append(KaraokeLineDto(
+                    syllables: syllables,
+                    startMs: timedLine.startMs,
+                    endMs: lineEndMs
                 ))
-            }
+            } else if hasWordTimedLines, !timedLine.text.isEmpty {
+                // Mixed track: this line has no word timings, but other
+                // lines do — and because a karaoke entry is published
+                // below, CustomLyrics' line-synced fill (which skips
+                // tracks that already have an entry) would never cover
+                // this line. Fill it the way SpicyLyrics fills Line-type
+                // songs: split the line into words that all light up at
+                // the line's start. Pure line tracks (no word timings
+                // anywhere) still publish nothing here and keep using
+                // that shared fill.
+                let pseudoSyllables = timedLine.text
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .map {
+                        KaraokeSyllableDto(
+                            text: String($0),
+                            startMs: timedLine.startMs,
+                            endMs: timedLine.startMs,
+                            isPartOfWord: false
+                        )
+                    }
 
-            karaokeLines.append(KaraokeLineDto(
-                syllables: syllables,
-                startMs: timedLine.startMs,
-                endMs: lineEndMs
-            ))
+                if !pseudoSyllables.isEmpty {
+                    karaokeLines.append(KaraokeLineDto(
+                        syllables: pseudoSyllables,
+                        startMs: timedLine.startMs,
+                        endMs: lineEndMs
+                    ))
+                }
+            }
         }
 
         if !karaokeLines.isEmpty {
@@ -437,25 +506,33 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         let (data, statusCode) = try perform(ttmlUrl, session: lrcRedSession, logTag: "lrc.red")
 
         guard statusCode == 200 else {
+            logHttpFailure(logTag: "lrc.red", statusCode: statusCode, context: "TTML for \(isrc)")
             throw LyricsError.noSuchSong
         }
 
-        let parserDelegate = LrcRedTTMLPlainParser()
+        let parserDelegate = LrcRedTTMLParser()
         let xmlParser = XMLParser(data: data)
         xmlParser.delegate = parserDelegate
 
-        guard xmlParser.parse(), !parserDelegate.lines.isEmpty else {
+        guard xmlParser.parse(), !parserDelegate.lineEntries.isEmpty else {
             throw LyricsError.noSuchSong
         }
 
-        let texts = parserDelegate.lines
+        let texts = parserDelegate.lineEntries.map(\.text)
 
-        return LyricsDto(
+        var dto = LyricsDto(
             lines: texts.map { LyricsLineDto(content: $0) },
             timeSynced: false,
             romanization: texts.canBeRomanized ? .canBeRomanized : .original,
             providerCredit: "lrc.red"
         )
+
+        // The plain lines come from this very document, so a translation
+        // keyed to the same lines aligns exactly — the parser only
+        // returns one when every line's key resolves (see its comment).
+        dto.translation = parserDelegate.translation(matchingLineKeys: parserDelegate.lineEntries.map(\.key))
+
+        return dto
     }
 
     // MARK: - Stage 2: LiriQo
@@ -463,10 +540,14 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     /// Cache-fronted stage 2 entry point. A cached hit replays its DTOs
     /// (including the karaoke store handoff) without any network request;
     /// a cached miss rethrows `noSuchSong` so callers keep their existing
-    /// fallback behaviour. Fresh outcomes — success and failure alike —
-    /// are stored, so a track is never asked about twice in a session.
-    private func getLiriQoLyrics(_ query: LyricsSearchQuery) throws -> LyricsDto {
-        let cacheKey = liriQoCacheKey(for: query)
+    /// fallback behaviour. Successes and definitive "no lyrics" outcomes
+    /// are stored, so such a track is never asked about twice in a
+    /// session — but transient failures (rate limit, server error,
+    /// network error, undecodable body) are NOT stored: recording them
+    /// as misses would pin a momentary failure as "no lyrics" until the
+    /// app restarts.
+    private func getLiriQoLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
+        let cacheKey = liriQoCacheKey(for: query, options: options)
 
         if let entry = cachedLiriQoEntry(for: cacheKey) {
             switch entry {
@@ -485,7 +566,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         do {
-            let (dto, karaoke) = try fetchLiriQoLyrics(query)
+            let (dto, karaoke) = try fetchLiriQoLyrics(query, options: options)
             storeLiriQoEntry(.hit(dto: dto, karaoke: karaoke), for: cacheKey)
 
             if let karaoke {
@@ -494,19 +575,34 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
             return dto
         } catch {
-            storeLiriQoEntry(.miss, for: cacheKey)
+            // Only a definitive "no lyrics" may be remembered. Anything
+            // else (LiriQoTransientError, URLError, decodingError, ...)
+            // leaves no trace, so the next play asks again.
+            if (error as? LyricsError) == .noSuchSong {
+                storeLiriQoEntry(.miss, for: cacheKey)
+            } else {
+                writeDebugLog("[LiriQo] Transient failure for \(query.title)/\(query.primaryArtist), not caching: \(error)")
+            }
+
             throw error
         }
     }
 
     /// The Spotify track ID is the stable identity; fall back to the
-    /// normalized title/artist pair when a query carries none.
-    private func liriQoCacheKey(for query: LyricsSearchQuery) -> String {
+    /// normalized title/artist pair when a query carries none. The
+    /// romanization flag is part of the key because a fetch with it on
+    /// can return romanized line text (see fetchLiriQoLyrics) — replaying
+    /// that for a romanization-off request, or vice versa, would be wrong.
+    private func liriQoCacheKey(for query: LyricsSearchQuery, options: LyricsOptions) -> String {
+        let base: String
+
         if !query.spotifyTrackId.isEmpty {
-            return "id:\(query.spotifyTrackId)"
+            base = "id:\(query.spotifyTrackId)"
+        } else {
+            base = "meta:\(normalizedForMatch(query.title))|\(normalizedForMatch(query.primaryArtist))"
         }
 
-        return "meta:\(normalizedForMatch(query.title))|\(normalizedForMatch(query.primaryArtist))"
+        return options.romanization ? base + "#rom" : base
     }
 
     private func cachedLiriQoEntry(for key: String) -> LiriQoCacheEntry? {
@@ -537,7 +633,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
     }
 
-    private func fetchLiriQoLyrics(_ query: LyricsSearchQuery) throws -> (dto: LyricsDto, karaoke: KaraokeLyricsDto?) {
+    private func fetchLiriQoLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> (dto: LyricsDto, karaoke: KaraokeLyricsDto?) {
         let queryString = ([
             "title": query.title,
             "artist": query.primaryArtist
@@ -550,7 +646,17 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         )
 
         guard statusCode == 200 else {
-            writeDebugLog("[LiriQo] HTTP \(statusCode) for \(query.title)/\(query.primaryArtist)")
+            logHttpFailure(logTag: "LiriQo", statusCode: statusCode, context: "Lyrics for \(query.title)/\(query.primaryArtist)")
+
+            // A rate limit or a server-side failure may clear by the next
+            // play, so it must not be remembered as "no lyrics" (the
+            // session cache only stores noSuchSong — see getLiriQoLyrics).
+            // A 404 means the aggregator has nothing for this query, and
+            // other 4xx would repeat identically: both are definitive.
+            if statusCode == 429 || statusCode >= 500 {
+                throw LiriQoTransientError.transient
+            }
+
             throw LyricsError.noSuchSong
         }
 
@@ -564,9 +670,12 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         // LiriQo reports some failures as HTTP 200 with an error field.
+        // Its wording does not say whether the failure is definitive, so
+        // treat it as transient: the worst case is one repeated request
+        // on the next play, never a session-long false "no lyrics".
         if let errorMessage = response.error, !errorMessage.isEmpty {
             writeDebugLog("[LiriQo] API error for \(query.title)/\(query.primaryArtist): \(errorMessage)")
-            throw LyricsError.noSuchSong
+            throw LiriQoTransientError.transient
         }
 
         if let count = response.count, count == 0 {
@@ -591,63 +700,113 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         if let timed = track.timed, !timed.isEmpty {
+            // Upstream timing is not trustworthy as-is (zero-filled
+            // starts, null ends, out-of-order lines have all been
+            // observed), so everything below works on normalized lines.
+            let entries = normalizeTimedLines(timed)
+
+            guard !entries.isEmpty else {
+                throw LyricsError.noSuchSong
+            }
+
             var lines: [LyricsLineDto] = []
             var karaokeLines: [KaraokeLineDto] = []
+            let hasWordTimedLines = entries.contains { !$0.words.isEmpty }
 
-            for timedLine in timed {
-                guard let text = timedLine.text else { continue }
-
-                let startMs = Int(timedLine.start ?? 0)
-                let endMs = Int(timedLine.end ?? Double(startMs))
-
+            for entry in entries {
                 lines.append(LyricsLineDto(
-                    content: text.lyricsNoteIfEmpty,
-                    offsetMs: startMs
+                    content: entry.text.lyricsNoteIfEmpty,
+                    offsetMs: entry.startMs
                 ))
 
-                guard let words = timedLine.words, !words.isEmpty, !text.isEmpty else { continue }
+                if !entry.words.isEmpty, !entry.text.isEmpty {
+                    let syllables = entry.words.map {
+                        KaraokeSyllableDto(
+                            text: $0.text,
+                            startMs: $0.startMs,
+                            endMs: $0.endMs,
+                            isPartOfWord: false
+                        )
+                    }
 
-                let syllables = words.compactMap { word -> KaraokeSyllableDto? in
-                    guard let wordText = word.text, !wordText.isEmpty else { return nil }
-
-                    let wordStartMs = Int(word.start ?? Double(startMs))
-
-                    return KaraokeSyllableDto(
-                        text: wordText,
-                        startMs: wordStartMs,
-                        endMs: Int(word.end ?? Double(wordStartMs)),
-                        isPartOfWord: false
-                    )
-                }
-
-                if !syllables.isEmpty {
                     karaokeLines.append(KaraokeLineDto(
                         syllables: syllables,
-                        startMs: startMs,
-                        endMs: endMs
+                        startMs: entry.startMs,
+                        endMs: max(entry.endMs, syllables.last?.endMs ?? entry.endMs)
                     ))
+                } else if hasWordTimedLines, !entry.text.isEmpty {
+                    // Wordless line inside a word-synced track (an
+                    // instrumental break, a backing line): publishing
+                    // karaoke without it would leave a hole in the custom
+                    // lyrics view, and CustomLyrics' line-synced fill
+                    // skips tracks that already have an entry. Fill it
+                    // SpicyLyrics Line-style — every word lights up at the
+                    // line's start. Pure line tracks publish no karaoke
+                    // here at all and keep using that shared fill.
+                    let pseudoSyllables = entry.text
+                        .split(whereSeparator: { $0.isWhitespace })
+                        .map {
+                            KaraokeSyllableDto(
+                                text: String($0),
+                                startMs: entry.startMs,
+                                endMs: entry.startMs,
+                                isPartOfWord: false
+                            )
+                        }
+
+                    if !pseudoSyllables.isEmpty {
+                        karaokeLines.append(KaraokeLineDto(
+                            syllables: pseudoSyllables,
+                            startMs: entry.startMs,
+                            endMs: entry.endMs
+                        ))
+                    }
                 }
             }
 
-            guard !lines.isEmpty else {
-                throw LyricsError.noSuchSong
+            var dto = LyricsDto(
+                lines: lines,
+                timeSynced: true,
+                romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
+                providerCredit: providerCredit
+            )
+
+            // Translation, when the payload carries one that aligns with
+            // certainty: the track's TTML holds translations keyed by the
+            // same line keys its timed lines carry (verified live with
+            // YOASOBI "アイドル": 74/74 keys covered). A timestamped
+            // `translation` string whose timestamps match the lines
+            // exactly is the only other accepted form.
+            if let ttml = track.ttml, !ttml.isEmpty {
+                dto.translation = ttmlTranslation(from: ttml, lineKeys: entries.map(\.key))
+            }
+
+            if dto.translation == nil, let translationText = track.translation {
+                dto.translation = translationFromTimedLrc(translationText, dtoLines: lines)
             }
 
             // Handed to the caller instead of the karaoke store directly,
             // so the result can be cached and replayed as-is.
-            let karaoke = karaokeLines.isEmpty ? nil : KaraokeLyricsDto(
+            var karaoke = karaokeLines.isEmpty ? nil : KaraokeLyricsDto(
                 lines: karaokeLines,
                 songWriters: [],
                 providerCode: track.provider,
                 providerName: "LiriQo"
             )
 
-            return (dto: LyricsDto(
-                lines: lines,
-                timeSynced: true,
-                romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
-                providerCredit: providerCredit
-            ), karaoke: karaoke)
+            // A provider-supplied romanization replaces the line text
+            // itself (the Genius Romanizations model), so the word
+            // karaoke built from the original script no longer matches
+            // the body and is dropped — CustomLyrics then rebuilds
+            // line-style karaoke from the romanized lines.
+            if options.romanization,
+               let romanizationText = track.romanization,
+               let romanized = romanizedDto(from: dto, romanizationText: romanizationText) {
+                dto = romanized
+                karaoke = nil
+            }
+
+            return (dto: dto, karaoke: karaoke)
         }
 
         // Tracks that carry only an `lrc` string: parse it into timed
@@ -660,12 +819,24 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                     LyricsLineDto(content: $0.text.lyricsNoteIfEmpty, offsetMs: $0.startMs)
                 }
 
-                return (dto: LyricsDto(
+                var dto = LyricsDto(
                     lines: lines,
                     timeSynced: true,
                     romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
                     providerCredit: providerCredit
-                ), karaoke: nil)
+                )
+
+                if let translationText = track.translation {
+                    dto.translation = translationFromTimedLrc(translationText, dtoLines: lines)
+                }
+
+                if options.romanization,
+                   let romanizationText = track.romanization,
+                   let romanized = romanizedDto(from: dto, romanizationText: romanizationText) {
+                    dto = romanized
+                }
+
+                return (dto: dto, karaoke: nil)
             }
 
             if !parsed.plain.isEmpty {
@@ -690,6 +861,194 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             romanization: texts.canBeRomanized ? .canBeRomanized : .original,
             providerCredit: providerCredit
         ), karaoke: nil)
+    }
+
+    /// One LiriQo timed line after normalization, with its TTML line key
+    /// and word timings carried along.
+    private struct NormalizedTimedLine {
+        var text: String
+        var startMs: Int
+        var endMs: Int
+        var key: String?
+        var words: [(text: String, startMs: Int, endMs: Int)]
+    }
+
+    /// Makes LiriQo's timed data safe to build DTOs from. Upstream
+    /// payloads arrive with zero-filled starts (one observed track had
+    /// 24 lines all starting at 0), null ends and occasionally
+    /// out-of-order lines; fed downstream as-is, that breaks the native
+    /// view's seek/highlight assumptions. Following SpicyLyrics'
+    /// normalizeMonotonicTiming: sort by start (stable, so equal starts
+    /// keep their payload order), clamp line starts to be non-decreasing
+    /// with every end at or after its start, then chain the syllables so
+    /// no syllable starts before the previous one ends.
+    private func normalizeTimedLines(_ timed: [LiriQoTimedLine]) -> [NormalizedTimedLine] {
+        var entries: [NormalizedTimedLine] = []
+
+        for line in timed {
+            guard let text = line.text else { continue }
+
+            let startMs = max(0, Int(line.start ?? 0))
+            let endMs = Int(line.end ?? Double(startMs))
+
+            let words = (line.words ?? []).compactMap { word -> (text: String, startMs: Int, endMs: Int)? in
+                guard let wordText = word.text, !wordText.isEmpty else { return nil }
+
+                let wordStartMs = Int(word.start ?? Double(startMs))
+
+                return (text: wordText, startMs: wordStartMs, endMs: Int(word.end ?? Double(wordStartMs)))
+            }
+
+            entries.append(NormalizedTimedLine(
+                text: text,
+                startMs: startMs,
+                endMs: endMs,
+                key: line.key,
+                words: words
+            ))
+        }
+
+        entries.sort { $0.startMs < $1.startMs }
+
+        var previousStartMs = Int.min
+        for index in entries.indices {
+            entries[index].startMs = max(entries[index].startMs, previousStartMs)
+            entries[index].endMs = max(entries[index].endMs, entries[index].startMs)
+            previousStartMs = entries[index].startMs
+        }
+
+        var previousSyllableEndMs = Int.min
+        for lineIndex in entries.indices {
+            for wordIndex in entries[lineIndex].words.indices {
+                var word = entries[lineIndex].words[wordIndex]
+                word.startMs = max(word.startMs, previousSyllableEndMs)
+                word.endMs = max(word.endMs, word.startMs)
+                previousSyllableEndMs = word.endMs
+                entries[lineIndex].words[wordIndex] = word
+            }
+        }
+
+        return entries
+    }
+
+    /// Extracts the translation embedded in a TTML document (the form
+    /// Apple Music payloads carry), aligned by line key: the caller
+    /// passes the key of every DTO line in order, and a translation is
+    /// returned only when every key resolves — a partial or shifted
+    /// translation is never attached.
+    private func ttmlTranslation(from ttml: String, lineKeys: [String?]) -> LyricsTranslationDto? {
+        let parserDelegate = LrcRedTTMLParser()
+        let xmlParser = XMLParser(data: Data(ttml.utf8))
+        xmlParser.delegate = parserDelegate
+
+        guard xmlParser.parse() else {
+            return nil
+        }
+
+        return parserDelegate.translation(matchingLineKeys: lineKeys)
+    }
+
+    /// Accepts a track's `translation` string only in its timestamped
+    /// (LRC) form, and only when alignment is provable: same line count
+    /// as the body, unique timestamps, and every body line's offset
+    /// present among them. The plain-text form LiriQo currently serves
+    /// for NetEase tracks fails this on real songs (米津玄師 "Lemon":
+    /// 42 translation lines vs 43 body lines — the untranslated credit
+    /// line is simply omitted), so it is not used. The language code is
+    /// detected from the text itself rather than guessed.
+    private func translationFromTimedLrc(_ translationText: String, dtoLines: [LyricsLineDto]) -> LyricsTranslationDto? {
+        let parsed = Self.parseLrc(translationText)
+
+        guard !parsed.timed.isEmpty, parsed.timed.count == dtoLines.count else {
+            return nil
+        }
+
+        var textByTimestamp: [Int: String] = [:]
+
+        for entry in parsed.timed {
+            // A repeated timestamp would make the mapping ambiguous.
+            guard textByTimestamp[entry.startMs] == nil else {
+                return nil
+            }
+
+            textByTimestamp[entry.startMs] = entry.text
+        }
+
+        var lines: [String] = []
+
+        for line in dtoLines {
+            guard let offsetMs = line.offsetMs, let text = textByTimestamp[offsetMs] else {
+                return nil
+            }
+
+            lines.append(text)
+        }
+
+        guard let languageCode = NSLinguisticTagger.dominantLanguage(for: lines.joined(separator: "\n")) else {
+            return nil
+        }
+
+        return LyricsTranslationDto(languageCode: languageCode, lines: lines)
+    }
+
+    /// Adopts a provider-supplied romanization the way Genius adopts a
+    /// "Genius Romanizations" entry: the romanized text becomes the line
+    /// text and the DTO is marked `.romanized`. Only an exact line-count
+    /// match is accepted — a romanization whose lines do not correspond
+    /// one-to-one with the body is a crash risk (the original project's
+    /// issue #452 was exactly that), so any mismatch keeps the local
+    /// `.canBeRomanized` / `.original` judgement.
+    private func romanizedDto(from dto: LyricsDto, romanizationText: String) -> LyricsDto? {
+        let parsed = Self.parseLrc(romanizationText)
+
+        let romanizedLines: [String]
+
+        if !parsed.timed.isEmpty {
+            // Timestamped form: pair lines by timestamp, not by
+            // position, so the pairing is provable rather than assumed.
+            // Duplicate timestamps would make it ambiguous — reject.
+            var textByTimestamp: [Int: String] = [:]
+
+            for entry in parsed.timed {
+                guard textByTimestamp[entry.startMs] == nil else {
+                    return nil
+                }
+
+                textByTimestamp[entry.startMs] = entry.text
+            }
+
+            guard textByTimestamp.count == dto.lines.count else {
+                return nil
+            }
+
+            var lines: [String] = []
+
+            for line in dto.lines {
+                guard let offsetMs = line.offsetMs, let text = textByTimestamp[offsetMs] else {
+                    return nil
+                }
+
+                lines.append(text)
+            }
+
+            romanizedLines = lines
+        } else {
+            romanizedLines = parsed.plain
+        }
+
+        guard romanizedLines.count == dto.lines.count else {
+            return nil
+        }
+
+        var romanized = dto
+        romanized.lines = zip(dto.lines, romanizedLines).map { line, text in
+            var line = line
+            line.content = text
+            return line
+        }
+        romanized.romanization = .romanized
+
+        return romanized
     }
 
     /// Picks the best usable LiriQo candidate. A normalized title+artist
@@ -779,6 +1138,14 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     }
 }
 
+/// A LiriQo failure that may succeed on a later attempt (rate limit,
+/// server error, or an API error field of unknown definiteness). Kept
+/// distinct from `LyricsError.noSuchSong` — a definitive "no lyrics" —
+/// because only the latter may be recorded in the session cache.
+private enum LiriQoTransientError: Error {
+    case transient
+}
+
 // MARK: - lrc.red response models
 
 private struct LrcRedSearchResponse: Decodable {
@@ -815,14 +1182,51 @@ private struct LrcRedTimedWord {
     var startMs: Int
 }
 
-/// Extracts plain lyric lines from an lrc.red TTML document: every `<p>`
-/// is one line, and all character data inside it (including nested
-/// `<span>` word elements) is concatenated.
-private class LrcRedTTMLPlainParser: NSObject, XMLParserDelegate {
-    private(set) var lines: [String] = []
+/// Parses a TTML document of the shape lrc.red serves and LiriQo
+/// embeds: every `<p>` is one lyric line (all character data inside it,
+/// including nested `<span>` word elements, is concatenated), each
+/// carrying a line key when the document provides one (`lrc:key`), and
+/// the head can hold `<translations>` — `<text for="L1">` elements keyed
+/// to those same line keys, grouped per language in `<translation>`
+/// elements. Only the first translation language is collected.
+private class LrcRedTTMLParser: NSObject, XMLParserDelegate {
+    private(set) var lineEntries: [(key: String?, text: String)] = []
 
     private var insideParagraph = false
     private var currentLineText = ""
+    private var currentLineKey: String?
+
+    private var translationsDepth = 0
+    private var translationLanguageCode: String?
+    private var translationLinesByKey: [String: String] = [:]
+    private var insideFirstTranslation = false
+    private var firstTranslationEnded = false
+    private var insideTranslationText = false
+    private var currentTranslationKey: String?
+    private var currentTranslationText = ""
+
+    /// The collected translation, aligned to the given line keys in
+    /// order — or nil unless a language was found and EVERY key
+    /// resolves. Partial coverage is rejected outright: Spotify renders
+    /// translation lines positionally against the body, so a gap would
+    /// silently shift every line after it.
+    func translation(matchingLineKeys keys: [String?]) -> LyricsTranslationDto? {
+        guard let languageCode = translationLanguageCode, !translationLinesByKey.isEmpty else {
+            return nil
+        }
+
+        var lines: [String] = []
+
+        for key in keys {
+            guard let key, let text = translationLinesByKey[key] else {
+                return nil
+            }
+
+            lines.append(text)
+        }
+
+        return LyricsTranslationDto(languageCode: languageCode, lines: lines)
+    }
 
     func parser(
         _ parser: XMLParser,
@@ -831,15 +1235,41 @@ private class LrcRedTTMLPlainParser: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
-        if elementName == "p" {
+        switch elementName {
+        case "p":
             insideParagraph = true
             currentLineText = ""
+            currentLineKey = attributeDict["lrc:key"]
+                ?? attributeDict["itunes:key"]
+                ?? attributeDict["key"]
+                ?? attributeDict["xml:id"]
+        case "translations":
+            translationsDepth += 1
+        case "translation":
+            translationsDepth += 1
+
+            if !firstTranslationEnded {
+                insideFirstTranslation = true
+                translationLanguageCode = attributeDict["xml:lang"]
+            }
+        case "text":
+            if translationsDepth > 0, insideFirstTranslation, let key = attributeDict["for"] {
+                insideTranslationText = true
+                currentTranslationKey = key
+                currentTranslationText = ""
+            }
+        default:
+            break
         }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         if insideParagraph {
             currentLineText += string
+        }
+
+        if insideTranslationText {
+            currentTranslationText += string
         }
     }
 
@@ -849,13 +1279,34 @@ private class LrcRedTTMLPlainParser: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName qName: String?
     ) {
-        if elementName == "p" {
+        switch elementName {
+        case "p":
             let text = currentLineText.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
-                lines.append(text)
+                lineEntries.append((key: currentLineKey, text: text))
             }
             insideParagraph = false
             currentLineText = ""
+            currentLineKey = nil
+        case "translations":
+            translationsDepth = max(0, translationsDepth - 1)
+        case "translation":
+            translationsDepth = max(0, translationsDepth - 1)
+
+            if insideFirstTranslation {
+                insideFirstTranslation = false
+                firstTranslationEnded = true
+            }
+        case "text":
+            if insideTranslationText, let key = currentTranslationKey {
+                translationLinesByKey[key] = currentTranslationText
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            insideTranslationText = false
+            currentTranslationKey = nil
+            currentTranslationText = ""
+        default:
+            break
         }
     }
 }
@@ -881,6 +1332,19 @@ private struct LiriQoTrack: Decodable {
     /// a raw LRC string instead of `plain`/`timed` — observed live with
     /// Koruru "Our Memories", whose primary track carries nothing else.
     var lrc: String?
+    /// The source TTML document, when the upstream provides one (Apple
+    /// Music does). Its embedded translations are keyed by the same line
+    /// keys the `timed` lines carry, which is what makes them safely
+    /// alignable — see ttmlTranslation(from:lineKeys:).
+    var ttml: String?
+    /// Provider-supplied translation text (NetEase's tlyric, via LiriQo).
+    /// Observed live as untimed plain text whose line count differs from
+    /// the body, which cannot be aligned safely; only a timestamped form
+    /// is ever used — see translationFromTimedLrc(_:dtoLines:).
+    var translation: String?
+    /// Provider-supplied romanization text (e.g. a romalrc). Adopted
+    /// only on an exact line-count match — see romanizedDto(from:...).
+    var romanization: String?
 }
 
 private struct LiriQoTimedLine: Decodable {
@@ -892,6 +1356,9 @@ private struct LiriQoTimedLine: Decodable {
     var end: Double?
     var words: [LiriQoWord]?
     var isInstrumental: Bool?
+    /// Line key ("L1", "L2", ...) matching the `for` attributes of the
+    /// translations embedded in the track's TTML, when present.
+    var key: String?
 }
 
 private struct LiriQoWord: Decodable {
