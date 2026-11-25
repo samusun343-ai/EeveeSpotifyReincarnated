@@ -334,24 +334,47 @@ class LrclibLyricsRepository: LyricsRepository {
         }
 
         if let syncedLyrics = song.syncedLyrics, !syncedLyrics.isEmpty {
-            let lines = Array(syncedLyrics.components(separatedBy: "\n").dropLast())
-            return LyricsDto(
-                lines: mapSyncedLyricsLines(lines),
-                timeSynced: true,
-                romanization: lines.canBeRomanized ? .canBeRomanized : .original
-            )
+            let rawLines = Array(syncedLyrics.components(separatedBy: "\n").dropLast())
+            let mappedLines = mapSyncedLyricsLines(rawLines)
+
+            if !mappedLines.isEmpty {
+                return LyricsDto(
+                    lines: mappedLines,
+                    timeSynced: true,
+                    romanization: rawLines.canBeRomanized ? .canBeRomanized : .original
+                )
+            }
+
+            // Synced text that parses to zero timed lines (e.g. only LRC
+            // metadata tags) is not a result either — fall through to the
+            // plain text, and to the miss below if there is none.
         }
         
         guard let plainLyrics = song.plainLyrics, !plainLyrics.isEmpty else {
-            return LyricsDto(
-                lines: [],
-                timeSynced: false,
-                romanization: .original
-            )
+            // The record exists but carries no lyrics text at all, and it
+            // is not flagged instrumental (that case returned above). That
+            // is a miss, not a result: returning an empty DTO here made
+            // "LRCLIB has no lyrics for this song" indistinguishable from
+            // "this song is instrumental" downstream — the Genius fallback
+            // in CustomLyrics only runs on a throw, and the empty DTO is
+            // rendered as the instrumental placeholder, so a song that
+            // simply has no lyrics was presented as if it had some. The
+            // combined source's LRCLIB stage (LrcRedLiriQoLyricsRepository)
+            // already throws in exactly this case; match it.
+            throw LyricsError.noSuchSong
         }
         
         let lines = Array(plainLyrics.components(separatedBy: "\n").dropLast())
-        
+
+        // A plain text made only of blank lines (LRCLIB records exist in
+        // that shape) is no lyrics at all: as a DTO it would pass the
+        // offline cache's non-empty-lines guard and be stored and served
+        // as if the song had lyrics. Blank lines *within* real lyrics
+        // are untouched — this only fires when every line is blank.
+        guard lines.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+            throw LyricsError.noSuchSong
+        }
+
         return LyricsDto(
             lines: lines.map { content in LyricsLineDto(content: content) },
             timeSynced: false,
