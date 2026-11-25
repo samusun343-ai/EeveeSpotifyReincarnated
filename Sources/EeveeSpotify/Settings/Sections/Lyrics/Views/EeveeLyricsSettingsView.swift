@@ -5,6 +5,7 @@ struct EeveeLyricsSettingsView: View {
     @State private var karaokeOptions: KaraokeOptions = UserDefaults.karaokeOptions
     @State private var timingOffsets: LyricsTimingOffsets = UserDefaults.lyricsTimingOffsets
     @State var spicyLyricsApiKey: String = UserDefaults.spicyLyricsApiKey
+    @State private var lyricsWidgetEnabled: Bool = UserDefaults.lyricsWidgetEnabled
 
     var body: some View {
         List {
@@ -18,6 +19,7 @@ struct EeveeLyricsSettingsView: View {
                 hideOnErrorSection()
                 romanizedLyricsSection()
                 lyricsTimingOffsetSection()
+                widgetSection()
                 
                 if viewModel.lyricsSource.supportsCustomLyricsView {
                     karaokeAppearanceSection()
@@ -32,6 +34,18 @@ struct EeveeLyricsSettingsView: View {
         .onChange(of: karaokeOptions) { UserDefaults.karaokeOptions = $0 }
         .onChange(of: timingOffsets) { UserDefaults.lyricsTimingOffsets = $0 }
         .onChange(of: spicyLyricsApiKey) { UserDefaults.spicyLyricsApiKey = $0 }
+        .onChange(of: lyricsWidgetEnabled) { UserDefaults.lyricsWidgetEnabled = $0 }
+    }
+
+    @ViewBuilder private func widgetSection() -> some View {
+        Section {
+            Toggle(
+                "lyrics_widget_enabled".localized,
+                isOn: $lyricsWidgetEnabled
+            )
+        } footer: {
+            Text("lyrics_widget_description".localized)
+        }
     }
 
     @ViewBuilder private func karaokeAppearanceSection() -> some View {

@@ -1,0 +1,54 @@
+# XcodeGen spec for the Eevee lyrics widget extension.
+#
+# This project is intentionally separate from the Theos build: the tweak
+# itself is a .dylib built by the root Makefile, while this .appex is only
+# meaningful inside the sideloaded IPA (see .github/workflows/buildpatched.yml
+# and build-ipa-local.sh, which build it with xcodegen + xcodebuild and copy
+# it into Payload/Spotify.app/PlugIns before the ipapatch step).
+#
+# Generate + build:
+#   brew install xcodegen
+#   cd Widget && xcodegen generate
+#   xcodebuild -project EeveeLyricsWidget.xcodeproj \
+#     -scheme EeveeLyricsWidget -configuration Release -sdk iphoneos \
+#     -destination 'generic/platform=iOS' \
+#     CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+name: EeveeLyricsWidget
+options:
+  bundleIdPrefix: com.spotify.client
+  deploymentTarget:
+    iOS: 16.0
+settings:
+  base:
+    # Unsigned on purpose: the IPA is signed by the user's installer
+    # (TrollStore / AltStore / ESign …). The workflow ad-hoc signs the
+    # product WITH EeveeLyricsWidget.entitlements afterwards so the
+    # requested App Groups are visible in the code signature — an
+    # unsigned binary carries no entitlements blob for a sideloader
+    # to read.
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  EeveeLyricsWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Eevee Lyrics
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: EeveeLyricsWidget.entitlements
+    settings:
+      base:
+        # An app extension's bundle ID must be prefixed with the host
+        # app's bundle ID (com.spotify.client).
+        PRODUCT_BUNDLE_IDENTIFIER: com.spotify.client.EeveeLyricsWidget
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES

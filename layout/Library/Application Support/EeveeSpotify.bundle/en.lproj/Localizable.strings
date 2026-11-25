@@ -57,6 +57,9 @@ show_fallback_reasons = "Show Fallback Reasons";
 hide_lyrics_on_error = "Hide on Error";
 hide_lyrics_on_error_description = "Remove the lyrics component if lyrics fail to load.";
 
+lyrics_widget_enabled = "Lyrics Widget (Experimental)";
+lyrics_widget_description = "Show the playing track and its current lyric line in the Eevee Lyrics home-screen widget. Only available in the sideloaded IPA, which bundles the widget extension; pausing or seeking does not update the widget's line until the next track.";
+
 romanized_lyrics = "Romanized Lyrics";
 romanized_lyrics_description = "Display romanized lyrics for Japanese, Korean, and Chinese.";
 
