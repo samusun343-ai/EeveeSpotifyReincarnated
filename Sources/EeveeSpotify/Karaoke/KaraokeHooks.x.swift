@@ -151,6 +151,10 @@ func activateKaraokeHooks() {
     KaraokeGroup().activate()
     writeDebugLog("[Karaoke] hook group activated")
 
+    // The Now Playing line hook rides along in KaraokeGroup; its controller
+    // only starts doing anything when the experimental setting is on.
+    NowPlayingLyricsLineController.shared.bootstrap()
+
     // -addPlayerObserver: exists on this class (Orion found it enough to
     // report a hook failure rather than a missing-target error — see
     // KaraokePlayerServiceObserverHook's comment) but doesn't actually

@@ -63,6 +63,13 @@ struct EeveeLyricsSettingsView: View {
                     Slider(value: $karaokeOptions.blurIntensity, in: 0...4, step: 0.1)
                 }
             }
+
+            // Independent of the custom lyrics view above: this publishes
+            // to the system Now Playing info, not to any in-app view.
+            Toggle(
+                "karaoke_lock_screen_line".localized,
+                isOn: $karaokeOptions.lockScreenLineEnabled
+            )
         } header: {
             Text("karaoke_section".localized)
         } footer: {
