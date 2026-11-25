@@ -79,9 +79,16 @@ extension URL {
     }
     
     var isAdRelated: Bool {
-        let path = self.path.lowercased()
-        let host = (self.host ?? "").lowercased()
-        
+        isAdRelated(host: (self.host ?? "").lowercased(), path: self.path.lowercased())
+    }
+
+    // Matcher core of isAdRelated, split out so a caller that already
+    // holds the lowercased host/path (SessionProtection's resume hook
+    // lowercases the host for its own checks) can feed them in instead
+    // of paying for the same lowercasing a second time. The property
+    // above passes exactly the values this body used to compute
+    // inline, so every existing call site gets identical results.
+    func isAdRelated(host: String, path: String) -> Bool {
         // Block the "Ad on App Open" home-screen banner (Pepsi, etc.)
         if path.contains("/ad-on-app-open") || path.contains("/ads/ad-on-app-open") {
             return true

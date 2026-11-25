@@ -346,21 +346,38 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
             let elapsedInt = Int(elapsed)
             let path = url.path
 
-            if url.isAdRelated {
+            // `host` is already lowercased here, so feed it (and the
+            // lowercased path) straight to the matcher core instead of
+            // paying for the same lowercasing again inside isAdRelated.
+            // The core receives exactly the values the property would
+            // have computed, so the verdict is unchanged.
+            if url.isAdRelated(host: host, path: path.lowercased()) {
                 writeDebugLog("[ORACLE][NET_BLOCK] Cancelled ad task at \(elapsedInt)s: \(host)\(path)")
                 task.cancel()
                 return
             }
 
+            // These four predicates each feed two consumers below: the
+            // auth-related decision and the post-startup block checks.
+            // They are pure substring checks over the immutable `host`
+            // / `path` locals, so evaluating each once, here, cannot
+            // change any outcome — it only skips the duplicate scans.
+            // The consumers keep their original order: ad check above,
+            // then the auth log, then the block checks.
+            let isApresolve = host.contains("apresolve")
+            let hasDeleteToken = path.contains("DeleteToken")
+            let hasSignup = path.contains("signup/public")
+            let hasScreenConfig = path.contains("pses/screenconfig")
+
             // bootstraps pass through: modifyRemoteConfiguration is idempotent, and
             // cancelling the second one broke fresh login on 9.1.34.
             let isAuthRelated = host.contains("login5") ||
-                host.contains("apresolve") ||
+                isApresolve ||
                 (host.contains("googleapis.com") && path.contains("/token")) ||
                 path.contains("bootstrap/v1/bootstrap") ||
-                path.contains("DeleteToken") ||
-                path.contains("signup/public") ||
-                path.contains("pses/screenconfig") ||
+                hasDeleteToken ||
+                hasSignup ||
+                hasScreenConfig ||
                 path.contains("logout") ||
                 path.contains("sign-out") ||
                 path.contains("session/purge") ||
@@ -382,17 +399,17 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
             // Block outgoing DeleteToken/signup requests at network level
             // Only block after initial startup (30s) to allow fresh login/signup
             if host.contains("spotify") || host.contains("spclient") {
-                if elapsed > 30 && path.contains("DeleteToken") {
+                if elapsed > 30 && hasDeleteToken {
                     writeDebugLog("[NET] Cancelled DeleteToken at \(elapsedInt)s")
                     task.cancel()
                     return
                 }
-                if elapsed > 30 && path.contains("signup/public") {
+                if elapsed > 30 && hasSignup {
                     writeDebugLog("[NET] Cancelled signup/public at \(elapsedInt)s")
                     task.cancel()
                     return
                 }
-                if elapsed > 30 && path.contains("pses/screenconfig") {
+                if elapsed > 30 && hasScreenConfig {
                     writeDebugLog("[NET] Cancelled pses/screenconfig at \(elapsedInt)s")
                     task.cancel()
                     return
@@ -405,7 +422,7 @@ class URLSessionTaskResumeHook: ClassHook<NSObject> {
                     task.cancel()
                     return
                 }
-                if elapsed > 30 && host.contains("apresolve") {
+                if elapsed > 30 && isApresolve {
                     writeDebugLog("[NET] Cancelled apresolve at \(elapsedInt)s")
                     task.cancel()
                     return
