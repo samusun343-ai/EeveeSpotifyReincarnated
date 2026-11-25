@@ -21,6 +21,18 @@ private let sbNotifSubstrings: [String] = [
     "player", "track", "position", "episode", "playback", "queue"
 ]
 
+// All probe log output is funneled through this one serial queue.
+// Probes sit on hot paths (every notification post, every session
+// task resume) and run at points where the caller's thread should
+// not pay for NSLog's formatting and log-daemon I/O. So a probe
+// makes its keep/drop decision on the spot, captures the finished
+// values, and hands the NSLog itself to this queue. The set, text,
+// and per-source order of emitted lines are unchanged — only the
+// emitting thread moves. (Ordering across concurrent posters was
+// never guaranteed anyway: NSLog calls from several threads
+// interleave just as appends to this queue do.)
+private let probeLogQueue = DispatchQueue(label: "EeveeSpotify.probe.log", qos: .utility)
+
 class TaskResumeProbeHook: ClassHook<NSObject> {
     typealias Group = ProbeNetGroup
     static let targetName = "NSURLSessionTask"
@@ -32,7 +44,10 @@ class TaskResumeProbeHook: ClassHook<NSObject> {
             if host.contains("spotify") || host.contains("scdn") || host.contains("spclient")
                 || host.contains("googleapis") || host.contains("apresolve") {
                 let method = task.currentRequest?.httpMethod ?? "?"
-                NSLog("[PROBE][NET] >> %@ %@%@", method, host, url.path)
+                let path = url.path
+                // Same line, emitted from probeLogQueue: resume()
+                // should not block on log I/O (see probeLogQueue).
+                probeLogQueue.async { NSLog("[PROBE][NET] >> %@ %@%@", method, host, path) }
             }
         }
         orig.resume()
@@ -53,6 +68,11 @@ class TaskResumeProbeHook: ClassHook<NSObject> {
 //   matching work happens at all. With it off, the name is lowercased
 //   once and checked against the precomputed lowercase pattern lists;
 //   non-matching posts go straight to orig with no logging.
+// - Even a matching post does no log I/O itself: the keep/drop
+//   decision is made on the posting thread, but the NSLog runs on
+//   probeLogQueue, so the post path costs one decision plus one
+//   queue append. The emitted lines are identical to the old
+//   synchronous ones.
 //
 // Caveat: this lightening only reduces the per-post cost. The
 // 2026-11-25 playback-start deadlock was not caused by the hook being
@@ -83,7 +103,7 @@ class NotifPostHook: ClassHook<NSObject> {
 
     private static func trace(_ name: String) {
         if traceNotif || isImportant(name) {
-            NSLog("[PROBE][NOTIF] %@", name)
+            probeLogQueue.async { NSLog("[PROBE][NOTIF] %@", name) }
         }
     }
 
@@ -352,5 +372,11 @@ func activateEeveeProbes() {
           traceSB ? "on" : "off")
     if netOn { ProbeNetGroup().activate() }
     if notifOn { ProbeNotifGroup().activate() }
-    dumpClassesOnce()
+    // The class dump is one-shot debug output (runtime introspection
+    // plus a long run of NSLog). Run it on the probe log queue so
+    // activation never pays for it synchronously; the emitted lines
+    // are unchanged. classDumpDone is only touched inside
+    // dumpClassesOnce, which now only ever runs on that serial queue,
+    // so the one-shot guard stays race-free.
+    probeLogQueue.async { dumpClassesOnce() }
 }
