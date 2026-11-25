@@ -13,6 +13,9 @@ extension EeveeLyricsSettingsView {
         text.append("petitlyrics_description".localized)
 
         text.append("\n\n")
+        text.append("lrcred_liriqo_description".localized)
+
+        text.append("\n\n")
         text.append("lyrics_additional_info".localized)
 
         return text

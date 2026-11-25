@@ -42,6 +42,7 @@ struct LyricsUncensorFill {
         let fallbackSources: [LyricsRepository] = [
             LrclibLyricsRepository.shared,
             GeniusLyricsRepository.shared,
+            LrcRedLiriQoLyricsRepository.shared,
         ]
 
         var result = lines
@@ -138,6 +139,7 @@ struct LyricsUncensorFill {
         let fallbackSources: [LyricsRepository] = [
             LrclibLyricsRepository.shared,
             GeniusLyricsRepository.shared,
+            LrcRedLiriQoLyricsRepository.shared,
         ]
 
         var resolvedPlainLines = plainLines

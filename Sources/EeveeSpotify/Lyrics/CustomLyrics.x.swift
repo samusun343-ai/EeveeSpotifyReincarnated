@@ -108,6 +108,8 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         repository = geniusLyricsRepository
     case .lrclib:
         repository = LrclibLyricsRepository.shared
+    case .lrcRedLiriQo:
+        repository = LrcRedLiriQoLyricsRepository.shared
     case .petit:
         repository = petitLyricsRepository
     case .spicylyrics:
@@ -204,6 +206,8 @@ private func loadCustomLyricsForCurrentTrack() throws -> Lyrics {
         repository = geniusLyricsRepository
     case .lrclib:
         repository = LrclibLyricsRepository.shared
+    case .lrcRedLiriQo:
+        repository = LrcRedLiriQoLyricsRepository.shared
     case .petit:
         repository = petitLyricsRepository
     case .spicylyrics:

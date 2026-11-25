@@ -47,6 +47,7 @@ LRCLIB: The most open service, offering time-synced lyrics. However, it lacks ly
 lyrics_additional_info = "If EeveeSpotify is unable to find a song or process the lyrics, you'll see a \"Couldn't load the lyrics for this song\" message. The lyrics might be wrong for some songs when using Genius due to how the tweak searches songs. I've made it work in most cases.";
 spicylyrics_description = "SpicyLyrics provides word-by-word karaoke lyrics. A built-in key is used by default. If you want to use your own key, go to Spicy ESR template, then press the Sign in button. After you sign in, agree to the ToS of Spicy and press Add ESR to my account. After it's added, copy the generated key, paste it into the Eevee lyrics section, then go back to Spicy and click I have stored it. Go to the apps page.";
 petitlyrics_description = "PetitLyrics: Offers plenty of time-synced Japanese and some international lyrics.";
+lrcred_liriqo_description = "lrc.red + LiriQo: A two-stage source. lrc.red answers first, serving fast, CDN-cached line- and word-synced lyrics; if it has nothing for a song, LiriQo is asked next, aggregating 11 providers with word-synced lyrics when available.";
 
 genius_fallback = "Genius Fallback";
 genius_fallback_description = "Load lyrics from Genius if there is a problem with %@.";
