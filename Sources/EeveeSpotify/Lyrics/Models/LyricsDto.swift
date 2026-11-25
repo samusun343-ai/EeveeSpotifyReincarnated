@@ -89,7 +89,7 @@ struct LyricsDto {
         }
         
         if !lines.isEmpty {
-            // Real schema field 14 is `previewLines`: the short preview
+            // Real schema field 17 is `previewLines`: the short preview
             // the NPV lyrics card shows (the card element has dedicated
             // snippet states). Official responses carry the opening
             // lines there; mirror that with the first lines of the

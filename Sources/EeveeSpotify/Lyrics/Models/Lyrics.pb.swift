@@ -92,13 +92,19 @@ enum LyricsSyncType: EeveeSwiftProtobuf.Enum {
 
 }
 
-/// Real `capStatus` of the ColorLyricsResponse Lyrics message (field 13).
-/// The field's type is spotify.lyricscapping.v1.CapStatus, determined
-/// statically from the Spotify 9.2.2 binary: the type's Swift field
-/// metadata lists the cases none / uncapped / reminder / capped in
-/// declaration order, which — by the same declaration-order numbering
-/// the syncType anchor confirmed behaviourally (unsynced=0,
-/// lineSynced=1, syllableSynced=2) — gives none=0, uncapped=1,
+/// Real `capStatus` of the ColorLyricsResponse Lyrics message (field 14 —
+/// corrected 2026-11-25: the field number was previously modelled as 13
+/// from declaration order, but direct disassembly of the 9.2.2 binary's
+/// decodeMessage jump table and traverse for
+/// Com_Spotify_Lyrics_V2_LyricsResponse proves the handled numbers are
+/// {1-12, 14, 17, 19}, with capStatus at 14 and previewLines at 17;
+/// field 13 does not exist). The field's type is
+/// spotify.lyricscapping.v1.CapStatus. Its valid raw values are 0-3
+/// (verified against the binary's rawValue validity check), and the
+/// Swift field metadata lists the cases none / uncapped / reminder /
+/// capped in declaration order — by the same declaration-order value
+/// numbering the syncType anchor confirmed behaviourally (unsynced=0,
+/// lineSynced=1, syllableSynced=2) — giving none=0, uncapped=1,
 /// reminder=2, capped=3. It records whether the lyrics are subject to
 /// Spotify's free-tier capping; the client's internal v3 lyrics model
 /// (Com_Spotify_Lyrics_V3_LyricsResponse) likewise stores this value.
@@ -250,15 +256,18 @@ struct LyricsData {
   /// Real schema field 10: `language`.
   var language: String = String()
 
-  /// Real schema field 13: `capStatus` (see LyricsCapStatus).
+  /// Real schema field 14: `capStatus` (see LyricsCapStatus).
   var capStatus: LyricsCapStatus = .none
 
-  /// Real schema field 14: `previewLines` (repeated LyricsLine) — the
+  /// Real schema field 17: `previewLines` (repeated LyricsLine) — the
   /// short preview of the lyrics the client shows on the NPV lyrics
-  /// card. This slot was previously modelled as a `restriction` enum;
-  /// that was a guess from the pre-9.2.2 schema reconstruction and the
-  /// value Eevee wrote was always the proto3 default (never on the
-  /// wire), so replacing it changes no emitted bytes.
+  /// card. (Field number verified from the 9.2.2 binary's decodeMessage
+  /// jump table and traverse; official responses carry the opening
+  /// lines at field 17.) This slot was previously modelled as a
+  /// `restriction` enum at 14; that was a guess from the pre-9.2.2
+  /// schema reconstruction and the value Eevee wrote was always the
+  /// proto3 default (never on the wire), so replacing it changes no
+  /// emitted bytes.
   var previewLines: [LyricsLine] = []
 
   var unknownFields = EeveeSwiftProtobuf.UnknownStorage()
@@ -517,8 +526,8 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
     5: .same(proto: "providedBy"),
     9: .same(proto: "alternatives"),
     10: .same(proto: "language"),
-    13: .same(proto: "capStatus"),
-    14: .same(proto: "previewLines"),
+    14: .same(proto: "capStatus"),
+    17: .same(proto: "previewLines"),
   ]
 
   mutating func decodeMessage<D: EeveeSwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -534,8 +543,8 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
       case 5: try { try decoder.decodeSingularStringField(value: &self.providedBy) }()
       case 9: try { try decoder.decodeRepeatedMessageField(value: &self.alternatives) }()
       case 10: try { try decoder.decodeSingularStringField(value: &self.language) }()
-      case 13: try { try decoder.decodeSingularEnumField(value: &self.capStatus) }()
-      case 14: try { try decoder.decodeRepeatedMessageField(value: &self.previewLines) }()
+      case 14: try { try decoder.decodeSingularEnumField(value: &self.capStatus) }()
+      case 17: try { try decoder.decodeRepeatedMessageField(value: &self.previewLines) }()
       default: break
       }
     }
@@ -568,10 +577,10 @@ extension LyricsData: EeveeSwiftProtobuf.Message, EeveeSwiftProtobuf._MessageImp
       try visitor.visitSingularStringField(value: self.language, fieldNumber: 10)
     }
     if self.capStatus != .none {
-      try visitor.visitSingularEnumField(value: self.capStatus, fieldNumber: 13)
+      try visitor.visitSingularEnumField(value: self.capStatus, fieldNumber: 14)
     }
     if !self.previewLines.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.previewLines, fieldNumber: 14)
+      try visitor.visitRepeatedMessageField(value: self.previewLines, fieldNumber: 17)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
