@@ -77,13 +77,11 @@ static id currentProvider(void) {
 }
 %end
 
-%hook _TtC23Collection_PlatformImpl27CollectionPlatformMigration
-- (id)stateProvider {
-    id provider = %orig;
-    keepProvider(provider);
-    return provider;
-}
-%end
+// _TtC23Collection_PlatformImpl27CollectionPlatformMigration was a stateProvider capture
+// path up to Spotify 9.1.84, but the class is gone in 9.2.2 (verified against the 9.2.2
+// symbol dump) and Collection_PlatformImpl has no successor class for it, so its %hook is
+// removed. The other capture paths (CollectionPlatformImpl, the state provider's own
+// subscribe methods, ACU/CUP below) are unaffected.
 
 %hook _TtC26AlignedCuration_CommonImpl21ACUCollectionPlatform
 - (id)stateProvider {
