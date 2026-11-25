@@ -650,6 +650,34 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             ), karaoke: karaoke)
         }
 
+        // Tracks that carry only an `lrc` string: parse it into timed
+        // lines when it has timestamps, plain lines otherwise.
+        if let lrc = track.lrc, !lrc.isEmpty {
+            let parsed = Self.parseLrc(lrc)
+
+            if !parsed.timed.isEmpty {
+                let lines = parsed.timed.map {
+                    LyricsLineDto(content: $0.text.lyricsNoteIfEmpty, offsetMs: $0.startMs)
+                }
+
+                return (dto: LyricsDto(
+                    lines: lines,
+                    timeSynced: true,
+                    romanization: lines.map(\.content).canBeRomanized ? .canBeRomanized : .original,
+                    providerCredit: providerCredit
+                ), karaoke: nil)
+            }
+
+            if !parsed.plain.isEmpty {
+                return (dto: LyricsDto(
+                    lines: parsed.plain.map { LyricsLineDto(content: $0) },
+                    timeSynced: false,
+                    romanization: parsed.plain.canBeRomanized ? .canBeRomanized : .original,
+                    providerCredit: providerCredit
+                ), karaoke: nil)
+            }
+        }
+
         guard let plainLyrics = track.plain, !plainLyrics.isEmpty else {
             throw LyricsError.noSuchSong
         }
@@ -674,6 +702,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     private func bestLiriQoTrack(_ candidates: [LiriQoTrack], query: LyricsSearchQuery) -> LiriQoTrack? {
         let usable = candidates.filter {
             ($0.timed?.isEmpty == false) || ($0.plain?.isEmpty == false)
+                || ($0.lrc?.isEmpty == false)
         }
 
         let wantedTitle = normalizedForMatch(query.title)
@@ -687,6 +716,8 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             let sync: Int
             if let timed = track.timed, !timed.isEmpty {
                 sync = timed.contains { $0.words?.isEmpty == false } ? 2 : 1
+            } else if let lrc = track.lrc, !lrc.isEmpty, !Self.parseLrc(lrc).timed.isEmpty {
+                sync = 1
             } else {
                 sync = 0
             }
@@ -697,6 +728,54 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return usable.enumerated().max { lhs, rhs in
             rank(of: lhs.element, index: lhs.offset) < rank(of: rhs.element, index: rhs.offset)
         }?.element
+    }
+
+    /// Parses a raw LRC string into timed lines and plain lines. Metadata
+    /// tags ([ti:], [ar:], [al:], [by:], [length:], …) are dropped, as are
+    /// empty lines. A line with at least one [mm:ss.xx] timestamp counts
+    /// as timed (first timestamp wins); any other text line is plain.
+    static func parseLrc(_ lrc: String) -> (timed: [(startMs: Int, text: String)], plain: [String]) {
+        var timed: [(startMs: Int, text: String)] = []
+        var plain: [String] = []
+
+        guard let timestampRegex = try? NSRegularExpression(
+            pattern: "\\[(\\d+):(\\d+(?:\\.\\d+)?)\\]"
+        ) else {
+            return (timed, plain)
+        }
+
+        for rawLine in lrc.components(separatedBy: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+
+            guard !line.isEmpty else { continue }
+
+            let matches = timestampRegex.matches(in: line, range: line.range)
+
+            if let first = matches.first,
+               let minuteRange = Range(first.range(at: 1), in: line),
+               let secondsRange = Range(first.range(at: 2), in: line),
+               let minute = Int(line[minuteRange]),
+               let seconds = Double(line[secondsRange]) {
+                let text = timestampRegex
+                    .stringByReplacingMatches(in: line, range: line.range, withTemplate: "")
+                    .trimmingCharacters(in: .whitespaces)
+
+                if !text.isEmpty {
+                    timed.append((startMs: minute * 60 * 1000 + Int(seconds * 1000), text: text))
+                }
+
+                continue
+            }
+
+            // Metadata tag line: [key:value] with a non-numeric key.
+            if line.hasPrefix("["), line.contains(":") {
+                continue
+            }
+
+            plain.append(line)
+        }
+
+        return (timed, plain)
     }
 }
 
@@ -798,6 +877,10 @@ private struct LiriQoTrack: Decodable {
     var artist: String?
     var plain: String?
     var timed: [LiriQoTimedLine]?
+    /// Some providers (notably Apple Music via LiriQo) ship lyrics only as
+    /// a raw LRC string instead of `plain`/`timed` — observed live with
+    /// Koruru "Our Memories", whose primary track carries nothing else.
+    var lrc: String?
 }
 
 private struct LiriQoTimedLine: Decodable {
