@@ -27,17 +27,31 @@ class ErrorViewControllerHook: ClassHook<UIViewController> {
             controller.collectionView().reloadData()
         }
         else if let controller = npvScrollViewController, let dataSource = scrollDataSource {
-            let lyricsProviderIndex = dataSource.activeProviders.firstIndex {
+            // This branch used to force-unwrap both the provider index and
+            // collectionView.dataSource. If the lyrics provider isn't among
+            // the active providers, or the collection view has no data source
+            // yet, there is nothing to hide — bail out instead of crashing.
+            guard let lyricsProviderIndex = dataSource.activeProviders.firstIndex {
                 NSStringFromClass(type(of: $0)) == HookTargetNameHelper.lyricsScrollProvider
+            } else {
+                return
             }
             
             let collectionView = controller.collectionView()
-            let dataSource = Ivars<__UIDiffableDataSource>(collectionView.dataSource!)._impl
             
-            let itemIdentifiers = dataSource.itemIdentifiers()
-            let lyricsProviderItemIdentifier = itemIdentifiers[lyricsProviderIndex!]
+            guard let collectionViewDataSource = collectionView.dataSource else {
+                return
+            }
             
-            dataSource.deleteItemsWithIdentifiers([lyricsProviderItemIdentifier])
+            let diffableDataSource = Ivars<__UIDiffableDataSource>(collectionViewDataSource)._impl
+            
+            let itemIdentifiers = diffableDataSource.itemIdentifiers()
+            
+            guard lyricsProviderIndex < itemIdentifiers.count else {
+                return
+            }
+            
+            diffableDataSource.deleteItemsWithIdentifiers([itemIdentifiers[lyricsProviderIndex]])
         }
     }
 }
