@@ -38,7 +38,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     private let lrcRedSession: URLSession
     private let liriQoSession: URLSession
 
-    private static let userAgent = "EeveeSpotifyReincarnated v\(EeveeSpotify.version) (+https://github.com/samusun343-ai/EeveeSpotifyReincarnated)"
+    private static let userAgent = "EeveeSpotifyReincarnated v\(EeveeSpotify.version) (+https://github.com/samusun343-ai/EeveeSpotifyReincarnated; contact: https://github.com/samusun343-ai/EeveeSpotifyReincarnated/issues)"
     private static let lrcRedBaseUrl = "https://lrc.red"
     private static let liriQoBaseUrl = "https://api.liriqo-alfarrizi.my.id/v1"
 
