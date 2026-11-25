@@ -1,8 +1,18 @@
 import Foundation
 
 enum SponsorBlockFormatters {
+    // Segment/playhead values come from a remote API; Int() traps on
+    // non-finite input, so normalize before any conversion.
+    private static func sanitized(_ s: Double) -> Double {
+        s.isFinite ? max(0, s) : 0
+    }
+
+    static func wholeSeconds(_ s: Double) -> Int {
+        Int(sanitized(s))
+    }
+
     static func time(_ s: Double) -> String {
-        let sec = max(0, s)
+        let sec = sanitized(s)
         let h = Int(sec) / 3600
         let m = (Int(sec) % 3600) / 60
         let secPart = sec.truncatingRemainder(dividingBy: 60)
@@ -11,7 +21,7 @@ enum SponsorBlockFormatters {
     }
 
     static func shortTime(_ s: Double) -> String {
-        let sec = max(0, s)
+        let sec = sanitized(s)
         let m = Int(sec) / 60
         let r = Int(sec) % 60
         return String(format: "%d:%02d", m, r)

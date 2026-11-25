@@ -66,6 +66,9 @@ enum BrowsitaSectionStripper {
         guard let (outerLen, outerLenBytes) = readVarint(data, at: cursor) else { return bail(path, "bad-outer-varint") }
         cursor += outerLenBytes
         let containerStart = cursor
+        // Bound the length as UInt64 before converting: a hostile varint can
+        // exceed Int.max (trapping Int()) or overflow the addition itself.
+        guard outerLen <= UInt64(data.count - cursor) else { return bail(path, "outer-len-overflow") }
         let containerEnd = cursor + Int(outerLen)
         guard containerEnd <= data.count else { return bail(path, "outer-len-overflow") }
 
@@ -80,6 +83,7 @@ enum BrowsitaSectionStripper {
             guard let (secLen, secLenBytes) = readVarint(data, at: c) else { return bail(path, "bad-section-varint idx=\(idx)") }
             c += secLenBytes
             let contentStart = c
+            guard c <= containerEnd, secLen <= UInt64(containerEnd - c) else { return bail(path, "section-len-overflow idx=\(idx)") }
             let contentEnd = c + Int(secLen)
             guard contentEnd <= containerEnd else { return bail(path, "section-len-overflow idx=\(idx)") }
 
@@ -136,10 +140,15 @@ enum BrowsitaSectionStripper {
     }
 
     private static var probeCount = 0
+    // strip() runs on URLSession's concurrent delegate queues (both network
+    // hooks call it), so the probe counter needs a lock.
+    private static let probeLock = NSLock()
 
     private static func probeNoMatch(_ data: Data, path: String) {
-        guard probeCount < 6 else { return }
+        probeLock.lock()
+        guard probeCount < 6 else { probeLock.unlock(); return }
         probeCount += 1
+        probeLock.unlock()
         var strings: [String] = []
         var current: [UInt8] = []
         for b in data {

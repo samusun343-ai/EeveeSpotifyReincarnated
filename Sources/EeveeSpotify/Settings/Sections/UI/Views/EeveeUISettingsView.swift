@@ -48,14 +48,19 @@ struct EeveeUISettingsView: View {
                 }
             }
             
-            Section {
-                Toggle(
-                    "dark_popups".localized,
-                    isOn: Binding<Bool>(
-                        get: { UserDefaults.darkPopUps },
-                        set: { UserDefaults.darkPopUps = $0 }
+            // DarkPopUps' targets don't exist on 9.1.x (the group is
+            // neutered to dummy UIView targets there and never activated),
+            // so only offer the toggle where it can actually take effect.
+            if EeveeSpotify.hookTarget != .v91 {
+                Section {
+                    Toggle(
+                        "dark_popups".localized,
+                        isOn: Binding<Bool>(
+                            get: { UserDefaults.darkPopUps },
+                            set: { UserDefaults.darkPopUps = $0 }
+                        )
                     )
-                )
+                }
             }
             
             SpacerView()

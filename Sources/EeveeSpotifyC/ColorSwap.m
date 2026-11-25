@@ -36,6 +36,7 @@ static CGColorRef copySwapped(CGColorRef color) {
     if (!color || CFGetTypeID(color) != CGColorGetTypeID()) return NULL;
     size_t n = CGColorGetNumberOfComponents(color);
     const CGFloat *c = CGColorGetComponents(color);
+    if (!c) return NULL;
     if (sAmoled && isBaseGrey(c, n)) {
         atomic_fetch_add_explicit(&sGreyHits, 1, memory_order_relaxed);
         return CGColorCreateGenericGray(0, CGColorGetAlpha(color));

@@ -213,8 +213,18 @@ class OauthAccessTokenBridgeHook: ClassHook<NSObject> {
         }
     }
 
+    private static var extenderStartedKey: UInt8 = 0
+
     // orion:new
     func startExpiryExtender() {
+        // `init` can run again for the same bridge; without a once-guard each
+        // call spawns another 60s loop writing the same ivar.
+        if objc_getAssociatedObject(target, &Self.extenderStartedKey) != nil { return }
+        objc_setAssociatedObject(
+            target, &Self.extenderStartedKey, NSNumber(value: true),
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+
         // genuine weak ref so the loop exits when the bridge deallocates (no leaked thread)
         weak var weakTarget = target
         DispatchQueue.global(qos: .utility).async {

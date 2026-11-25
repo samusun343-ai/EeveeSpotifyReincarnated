@@ -384,6 +384,15 @@ struct EeveeSpotify: Tweak {
             activateEeveeProbes()
             activateSponsorBlock()
             activateKaraokeHooks()
+
+            // The legacy path below activates this group unconditionally;
+            // without this, the Experiments toggle is dead on 9.1.x.
+            if UserDefaults.experimentsOptions.showInstagramDestination,
+               NSClassFromString("SPTSharingSDK") != nil,
+               NSClassFromString("SPTShare_FoundationImplProperties") != nil {
+                InstgramDestinationGroup().activate()
+                writeDebugLog("[INIT] Activated InstgramDestinationGroup")
+            }
             return
         }
 
