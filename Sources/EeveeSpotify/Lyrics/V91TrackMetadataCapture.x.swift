@@ -7,6 +7,49 @@ var capturedTrackTitle: String?
 var capturedArtistName: String?
 var capturedTrackId: String?
 
+// The capture globals above are written and read from several threads at
+// once (Spotify's request threads, the prefetch queue, and the real fetch
+// path during rapid skipping). All access goes through these helpers so a
+// title/artist/id triple is never observed half-updated.
+private let capturedTrackMetadataLock = NSLock()
+
+/// Stores a captured metadata triple atomically.
+func storeCapturedTrackMetadata(trackId: String, title: String?, artist: String?) {
+    capturedTrackMetadataLock.lock()
+    capturedTrackId = trackId
+    capturedTrackTitle = title
+    capturedArtistName = artist
+    capturedTrackMetadataLock.unlock()
+}
+
+/// Returns the captured title/artist if they were captured for `trackId`.
+func capturedTrackMetadata(for trackId: String) -> (title: String, artist: String)? {
+    capturedTrackMetadataLock.lock()
+    defer { capturedTrackMetadataLock.unlock() }
+    
+    guard capturedTrackId == trackId,
+          let title = capturedTrackTitle,
+          let artist = capturedArtistName
+    else {
+        return nil
+    }
+    
+    return (title, artist)
+}
+
+/// Drops the captured metadata if it belongs to a different track.
+func clearCapturedTrackMetadata(unlessTrackId trackId: String) {
+    capturedTrackMetadataLock.lock()
+    
+    if capturedTrackId != trackId {
+        capturedTrackTitle = nil
+        capturedArtistName = nil
+        capturedTrackId = nil
+    }
+    
+    capturedTrackMetadataLock.unlock()
+}
+
 // Function to fetch track details using Spotify API if we have a token
 func fetchTrackDetails(trackId: String, token: String) -> (title: String, artist: String)? {
     let urlString = "https://api.spotify.com/v1/tracks/\(trackId)"

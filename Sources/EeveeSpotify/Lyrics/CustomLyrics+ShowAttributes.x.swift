@@ -51,7 +51,7 @@ class LyricsOnlyViewControllerHook: ClassHook<UIViewController> {
         //
         
         if UserDefaults.lyricsOptions.showFallbackReasons,
-            let description = lyricsState.fallbackError?.description
+            let description = currentLyricsState().fallbackError?.description
         {
             let attributedString = Dynamic.SPTEncoreAttributedString.alloc(
                 interface: SPTEncoreAttributedString.self
@@ -72,7 +72,7 @@ class LyricsOnlyViewControllerHook: ClassHook<UIViewController> {
             )
         }
         
-        if lyricsState.wasRomanized {
+        if currentLyricsState().wasRomanized {
             let attributedString = Dynamic.SPTEncoreAttributedString.alloc(
                 interface: SPTEncoreAttributedString.self
             )
