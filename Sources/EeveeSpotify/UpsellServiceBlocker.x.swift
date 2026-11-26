@@ -133,6 +133,10 @@ class PlayFullSongUpsellServiceKill: ClassHook<NSObject> {
 
 // Language-independent fallback for the reusable Premium banner UIView.
 // DSA notices, library status and ordinary download progress use other classes.
+// Hide in place, never detach: the host can activate constraints against the
+// banner after attach, and removing it from the hierarchy turns that into a
+// "no common ancestor" NSLayoutConstraint exception (the CMP banner crash,
+// confirmed on device 2026-11-26).
 class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
     typealias Group = SelfLoadingUpsellBannerViewGroup
     static let targetName = "_TtC13Upsells_UIKit29SelfLoadingUpsellBannerUIView"
@@ -143,7 +147,6 @@ class SelfLoadingUpsellBannerViewKill: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             upsellServiceLog("suppressed SelfLoadingUpsellBannerUIView")
-            target.removeFromSuperview()
         }
     }
 }
