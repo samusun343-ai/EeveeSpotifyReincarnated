@@ -139,10 +139,9 @@ struct LyricsDto {
     /// when nothing is selected). A substituted response without a
     /// matching element is silently dropped by that check, which is
     /// why replaced lyrics rendered in Eevee's own views but the
-    /// native card never appeared. Guarantee a matching element:
-    /// the selected language when one is stored, an empty language
-    /// otherwise. The element carries the track's own lines, shaped
-    /// like a genuine translation entry; the gate compares only the
+    /// native card never appeared. Guarantee a matching element.
+    /// The element carries the track's own lines, shaped like a
+    /// genuine translation entry; the gate compares only the
     /// language, and the display conversion discards alternatives.
     ///
     /// When nothing is selected the client's key is a nil Optional
@@ -151,21 +150,38 @@ struct LyricsDto {
     /// no empty checks (verified against the 9.2.2 binary), but the
     /// nil/"" equivalence is a runtime behaviour that static analysis
     /// cannot fully prove; it needs one on-device confirmation.
+    ///
+    /// The client's read of the stored selection is itself gated by
+    /// a Bool in the state class: on a device where that gate is off,
+    /// the effective key is empty even though a selection is stored.
+    /// So when a selection is stored, guarantee BOTH the stored
+    /// language and the empty language are present — the gate passes
+    /// if either matches, and the settings action's lookup only ever
+    /// picks the element matching its own key, so the extra element
+    /// stays inert. Elements already present (e.g. from a genuine
+    /// translation) are never duplicated.
     private func ensureCardGateAlternative(_ lyricsData: inout LyricsData) {
-        let selectedLanguage = UserDefaults.standard.string(
+        let storedLanguage = UserDefaults.standard.string(
             forKey: Self.selectedTranslationLanguageKey
-        ) ?? ""
-
-        guard !lyricsData.alternatives.contains(
-            where: { $0.language == selectedLanguage }
-        ) else { return }
-
-        lyricsData.alternatives.append(
-            LyricsAlternative.with {
-                $0.language = selectedLanguage
-                $0.lines = lyricsData.lines.map { $0.content }
-            }
         )
+
+        var targetLanguages = [""]
+        if let storedLanguage, storedLanguage != "" {
+            targetLanguages.insert(storedLanguage, at: 0)
+        }
+
+        for language in targetLanguages {
+            guard !lyricsData.alternatives.contains(
+                where: { $0.language == language }
+            ) else { continue }
+
+            lyricsData.alternatives.append(
+                LyricsAlternative.with {
+                    $0.language = language
+                    $0.lines = lyricsData.lines.map { $0.content }
+                }
+            )
+        }
     }
 }
 
