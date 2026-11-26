@@ -125,4 +125,11 @@ extension UserDefaults {
 
     @UserDefault(key: "eeveeKnownTabs", defaultValue: [String]())
     static var knownTabs
+
+    // "TabBar.Item.*" accessibility identities of stock items identified as
+    // create (action) items, learned from the stronger runtime signals in
+    // GlassTabBar so the items can be re-identified by identity alone when
+    // a bar's item subtrees are realized differently.
+    @UserDefault(key: "eeveeKnownCreateTabIdentities", defaultValue: [String]())
+    static var knownCreateTabIdentities
 }
