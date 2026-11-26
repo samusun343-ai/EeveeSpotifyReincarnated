@@ -5,6 +5,19 @@ extension URL {
         self.path.contains("color-lyrics/v2")
     }
 
+    // The NPV lyrics-card route on current Spotify: same service, but the
+    // version segment is "v3" whenever the client's dynamic-colors
+    // predicate holds, and the response is a LyricsWrapperResponse rather
+    // than the V1 ColorLyricsResponse (static analysis:
+    // eevee-work/lyrics-card-v3route.md).
+    var isLyricsV3: Bool {
+        self.path.contains("color-lyrics/v3")
+    }
+
+    var isLyricsRequest: Bool {
+        isLyrics || isLyricsV3
+    }
+
     // Carries the account attributes the 9.2 core enforces - see NebulaAttributes.
     var isNebulaAttributes: Bool {
         self.path.contains("nebula/v1/configuration/attributes")

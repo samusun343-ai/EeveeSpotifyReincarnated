@@ -97,6 +97,27 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         do {
+            if url.isLyricsV3 {
+                // V3 responses are LyricsWrapperResponse protobuf, not the V1
+                // ColorLyricsResponse the branch below parses: supply the same
+                // lyrics re-encoded as a wrapper, original body as fallback.
+                let semaphore = DispatchSemaphore(value: 0)
+                var customLyricsData: Data?
+
+                DispatchQueue.global(qos: .userInitiated).async {
+                    customLyricsData = try? eeveeLyricsWrapperData(url.path, task: task)
+                    semaphore.signal()
+                }
+
+                _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
+                let lyricsPayload = customLyricsData ?? buffer
+                DispatchQueue.main.async { [self] in
+                    orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
+                    orig.URLSession(session, task: task, didCompleteWithError: nil)
+                }
+                return
+            }
+
             // Since 9.1.60 the lyrics consumer is @MainActor; calling orig off-main traps.
             if url.isLyrics {
                 if answerLyricsDownloadAsync(url, buffer: buffer, task: task, deliver: { [self] data in
@@ -160,13 +181,18 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
         }
 
         // Fetching on this delegate queue deadlocks; the held completion handler keeps the task waiting.
-        guard let url = task.currentRequest?.url, url.isLyrics, response.statusCode != 200 else {
+        guard let url = task.currentRequest?.url, url.isLyricsRequest, response.statusCode != 200 else {
             orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
             return
         }
 
         DispatchQueue.global(qos: .userInitiated).async { [self] in
-            let data = try? eeveeLyricsData(url.path, task: task)
+            let data: Data?
+            if url.isLyricsV3 {
+                data = try? eeveeLyricsWrapperData(url.path, task: task)
+            } else {
+                data = try? eeveeLyricsData(url.path, task: task)
+            }
 
             guard let lyricsData = data,
                   let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {

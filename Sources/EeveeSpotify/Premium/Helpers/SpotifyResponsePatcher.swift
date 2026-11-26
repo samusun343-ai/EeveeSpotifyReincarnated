@@ -84,7 +84,7 @@ enum SpotifyResponsePatcher {
         let shouldReplaceLyrics = BaseLyricsGroup.isActive
         let isDAC = url.path.lowercased().contains("/dac/view/v1/")
 
-        return (shouldReplaceLyrics && url.isLyrics)
+        return (shouldReplaceLyrics && url.isLyricsRequest)
             || (shouldPatchPremium && (
                 (url.isNebulaAttributes && NebulaAttributes.isEnabled) ||
                 (url.isRemoteConfiguration && NebulaAttributes.isEnabled) ||
