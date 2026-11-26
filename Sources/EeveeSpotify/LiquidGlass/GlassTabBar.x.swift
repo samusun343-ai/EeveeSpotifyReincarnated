@@ -51,6 +51,15 @@ enum GlassTabBar {
     static func noteCreateMenuManager(_ manager: NSObject) {
         if createMenuManager !== manager { createMenuManager = manager }
     }
+    // The create item's own button view, assigned to the state manager by
+    // Spotify's setup (CreateMenuStateManagerHook): whichever stock item
+    // contains this view is the action item, in either item realization.
+    static weak var createButtonView: UIView?
+
+    static func noteCreateButtonView(_ view: UIView?) {
+        if createButtonView !== view { createButtonView = view }
+    }
+    private static var createDriveAttempts = 0
     private static var barKey: UInt8 = 0
     private static var iconCache: [IconKey: UIImage] = [:]
     private static var liveMisses: [IconKey: Int] = [:]
@@ -299,14 +308,23 @@ enum GlassTabBar {
     // exactly (layer 2a), or when the gap positions relative to the active tab
     // pin the target's position down (layer 2b, see tabTarget).
     //
-    // Layer 2a knows the gap positions exactly: an action item's item view is
-    // the create menu's own view class, not the tab bar's element view, so the
-    // gap ordinals are read off the views themselves. When the number of
+    // Layer 2a knows the gap positions exactly: action items are identified
+    // off the views themselves (see isActionItem), so when the number of
     // identified action items equals the gap, every page tab's position is
     // ordinal minus the action items before it — wherever the gaps sit,
     // including a gap trailing the active tab, which layer 2b cannot reach.
-    // A tap on an identified action item itself selects nothing; it drives
-    // the create menu's state manager instead (see triggerCreateMenu).
+    // The identified mapping is authoritative and is NOT cross-checked
+    // against the items' active appearance: in the SwiftUI Element
+    // realization that appearance does not track programmatic selection (it
+    // stays on the launch tab after the container's selected view controller
+    // has moved), so the round-4 agreement check vetoed correct mappings —
+    // on device, the first tap of a session mapped and every later tap was
+    // vetoed (appearance position 0 vs selected position 1, which also drove
+    // layer 2b's gaps-before-active negative). The container's selected view
+    // controller is the only trustworthy selection state, and this
+    // arithmetic does not need it. A tap on an identified action item itself
+    // selects nothing; it drives the create menu's state manager instead
+    // (see triggerCreateMenu).
     //
     // Layer 3 — when no controller can be identified, navigate Spotify's own
     // link dispatcher to the tab's URI: the official navigation entry that deep
@@ -325,7 +343,7 @@ enum GlassTabBar {
         // not reliable enough to arithmetic on.
         let activeViews = stockViews.indices.filter { isActive(stockViews[$0], label: label(in: stockViews[$0])) }
         let activeOrdinal = activeViews.count == 1 ? activeViews[0] : nil
-        let actionOrdinals = Set(stockViews.indices.filter { isActionItem(stockViews[$0]) })
+        let actionOrdinals = actionOrdinals(in: stockViews)
 
         var fallbackCount: Int?
         for start in [source, stock].compactMap({ $0 }) {
@@ -350,9 +368,12 @@ enum GlassTabBar {
                 responder = current.next
             }
         }
-        if isActive(source, label: label(in: source)) {
-            return true
-        }
+        // No "the tapped item already reads active, treat as selected"
+        // shortcut: the appearance can be stale (see the layer note above),
+        // which silently swallowed taps on the launch tab while another tab
+        // was actually selected. Re-selecting the current tab goes through
+        // the container like any other selection, and the URI layer below
+        // covers the no-container case.
         if let uri = stockTabURI(for: source), CustomTabs.navigateStockURI(uri) {
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d opened via URI %@", ordinal, uri)
             return true
@@ -392,28 +413,19 @@ enum GlassTabBar {
         // Layer 2a: the gap positions are known exactly when the identified
         // action items account for the whole gap. The target's position is
         // then its ordinal minus the action items before it, wherever the
-        // gaps sit. When the active anchor is measurable it must agree with
-        // the identified mapping; a disagreement means the identification
-        // does not describe this container, and layer 2b decides instead.
+        // gaps sit. The result is returned as-is: no agreement check against
+        // the active appearance, whose reading can disagree with the
+        // container's actual selection for reasons that say nothing about
+        // this mapping (see the layer note above selectStockTab).
         if actionOrdinals.count == gap {
             if actionOrdinals.contains(ordinal) { return .actionItem }
             let pos = ordinal - actionOrdinals.filter { $0 < ordinal }.count
             if pos >= 0, pos < controllers.count {
-                var identified: TabTarget? = .controller(controllers[pos])
-                if let activeOrdinal, !actionOrdinals.contains(activeOrdinal),
-                   container.responds(to: NSSelectorFromString("selectedViewController")),
-                   let selected = container.value(forKey: "selectedViewController") as? UIViewController,
-                   let selectedPos = controllers.firstIndex(of: selected) {
-                    let activePos = activeOrdinal - actionOrdinals.filter { $0 < activeOrdinal }.count
-                    if activePos != selectedPos { identified = nil }
-                }
-                if let identified {
-                    eeveeLog(
-                        "[EeveeSpotify][Glass] selectStockTab: ordinal %d mapped to position %d via identified action items %@",
-                        ordinal, pos, actionOrdinals.sorted().map { String($0) }.joined(separator: ",")
-                    )
-                    return identified
-                }
+                eeveeLog(
+                    "[EeveeSpotify][Glass] selectStockTab: ordinal %d mapped to position %d via identified action items %@",
+                    ordinal, pos, actionOrdinals.sorted().map { String($0) }.joined(separator: ",")
+                )
+                return .controller(controllers[pos])
             }
         }
 
@@ -445,16 +457,60 @@ enum GlassTabBar {
         return .unmappable
     }
 
-    // An item is an action item when its view (or a view inside it) is the
-    // create menu's own item view class. Page tabs use the tab bar's element
-    // view instead; the create item's view is a passive display view whose
-    // open state the menu's state manager drives, with no page behind it.
-    // The class is a property of the view itself, unlike titles (localized)
-    // or accessibility identifiers (absent on the 9.2.2 items).
-    private static func isActionItem(_ view: UIView) -> Bool {
+    // The item's model identity as the realized bar exposes it: an
+    // accessibility identifier "TabBar.Item.<name>" carried by the item or
+    // one of its descendants. It is present in both realizations — the
+    // failure diagnostics recorded it on a child view of every item in the
+    // SwiftUI Element realization, whose top-level item views are all the
+    // same element class — unlike the top-level accessibility identifier,
+    // which the items do not carry at all.
+    private static func itemIdentity(_ view: UIView) -> String? {
         view.eeveeFirst(UIView.self) {
+            ($0.accessibilityIdentifier ?? "").hasPrefix("TabBar.Item.")
+        }?.accessibilityIdentifier
+    }
+
+    // An item is an action item when any of the identification signals
+    // fires. No single signal is trusted to exist in every realization of
+    // the bar, so they corroborate each other:
+    // - the create menu's own item view class appears in the item's subtree
+    //   (the item's top-level class does not distinguish it in the SwiftUI
+    //   Element realization, where every item is the same element class);
+    // - the item contains the create button view Spotify's setup assigned
+    //   to the create menu's state manager, which is realization-independent;
+    // - the item's "TabBar.Item.*" identity was learned from one of the
+    //   signals above on an earlier bar (see actionOrdinals(in:)), so the
+    //   identity alone re-identifies it when a later bar's subtrees are
+    //   realized differently.
+    // Page tabs use the tab bar's element view instead; the create item's
+    // view is a passive display view whose open state the menu's state
+    // manager drives, with no page behind it.
+    private static func isActionItem(_ view: UIView) -> Bool {
+        if view.eeveeFirst(UIView.self) {
             NSStringFromClass(type(of: $0)).hasSuffix("CreateMenuTabBarItemView")
-        } != nil
+        } != nil { return true }
+        if let button = createButtonView, button === view || button.isDescendant(of: view) { return true }
+        if let identity = itemIdentity(view),
+           UserDefaults.knownCreateTabIdentities.contains(identity) { return true }
+        return false
+    }
+
+    // The ordinals of the action items among the stock views, learned as a
+    // side effect: the identity of every action item identified by the
+    // class or button signal is remembered (persisted next to the known tab
+    // titles), so later bars can be identified by identity alone.
+    private static func actionOrdinals(in stockViews: [UIView]) -> Set<Int> {
+        let ordinals = Set(stockViews.indices.filter { isActionItem(stockViews[$0]) })
+        var known = UserDefaults.knownCreateTabIdentities
+        var changed = false
+        for ordinal in ordinals {
+            if let identity = itemIdentity(stockViews[ordinal]), !known.contains(identity) {
+                known.append(identity)
+                changed = true
+            }
+        }
+        if changed { UserDefaults.knownCreateTabIdentities = known }
+        return ordinals
     }
 
     // Drives the create menu for a tap on the create item. The item has no
@@ -470,9 +526,23 @@ enum GlassTabBar {
     // feature setup instead.
     private static func triggerCreateMenu(ordinal: Int) -> Bool {
         guard let manager = createMenuManager else {
+            // Capture runs during create-feature setup, which normally
+            // precedes any tap on the item; if a tap lands first, retry the
+            // drive briefly instead of dropping the tap outright. The tap
+            // reports success while a retry is pending; the eventual drive
+            // (or its failure) logs its own line.
+            if createDriveAttempts < 4 {
+                createDriveAttempts += 1
+                eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d is the create item; state manager not captured yet, retry %d scheduled", ordinal, createDriveAttempts)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    _ = triggerCreateMenu(ordinal: ordinal)
+                }
+                return true
+            }
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d is the create item but no create menu state manager captured yet", ordinal)
             return false
         }
+        createDriveAttempts = 0
         let selector = NSSelectorFromString("setCreateMenuOpenWithIsOpen:")
         guard manager.responds(to: selector) else {
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: captured create menu state manager does not respond to setCreateMenuOpenWithIsOpen:")
@@ -705,6 +775,7 @@ class CreateMenuStateManagerHook: ClassHook<NSObject> {
         orig.setCreateButtonView(view)
         guard #available(iOS 26.0, *) else { return }
         GlassTabBar.noteCreateMenuManager(target)
+        GlassTabBar.noteCreateButtonView(view)
     }
 }
 
