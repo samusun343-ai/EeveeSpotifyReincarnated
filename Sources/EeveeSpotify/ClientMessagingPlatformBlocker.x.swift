@@ -74,8 +74,15 @@ class CMPBottomSheetPageHook: ClassHook<UIViewController> {
     }
 }
 
-// The Home banner is rendered by a dedicated banner view. Same pattern as
-// SelfLoadingUpsellBannerViewKill: hide on attach, then detach.
+// The Home banner is rendered by a dedicated banner view. Hide on attach and
+// leave the view in the hierarchy: the host activates layout constraints
+// against this view asynchronously (dispatched to the main queue after
+// attach), so detaching it here makes that activation throw a
+// "no common ancestor" NSLayoutConstraint exception and kills the process
+// (confirmed on device 2026-11-26). Hidden + interaction-disabled keeps the
+// banner invisible and inert while the host's later constraint activation,
+// layout passes and show/hide bookkeeping still find the view where they
+// expect it.
 class CMPBannerViewHook: ClassHook<UIView> {
     typealias Group = CMPBannerViewGroup
     static let targetName =
@@ -87,14 +94,16 @@ class CMPBannerViewHook: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             cmpLog("suppressed CMP banner view")
-            target.removeFromSuperview()
         }
     }
 }
 
 // Upsell "element" views rendered from Hub/queue component trees. Named
 // targets (UpsellBanner/PremiumUpsell in the class name), so no DSA or status
-// UI can match.
+// UI can match. Like the banner hook above, these hide in place and never
+// detach: the component host may activate constraints or re-layout against
+// the element after attach, and a detached view turns that into the same
+// "no common ancestor" exception.
 class UpsellBannerElementUIHook: ClassHook<NSObject> {
     typealias Group = UpsellElementViewGroup
     static let targetName =
@@ -107,7 +116,6 @@ class UpsellBannerElementUIHook: ClassHook<NSObject> {
         view.isUserInteractionEnabled = false
         if view.superview != nil {
             cmpLog("suppressed UpsellBannerElementUI")
-            view.removeFromSuperview()
         }
     }
 }
@@ -124,7 +132,6 @@ class PremiumUpsellBannerElementUIHook: ClassHook<NSObject> {
         view.isUserInteractionEnabled = false
         if view.superview != nil {
             cmpLog("suppressed PremiumUpsellBannerElementUI")
-            view.removeFromSuperview()
         }
     }
 }
@@ -140,7 +147,6 @@ class PremiumUpsellControlPanelHook: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             cmpLog("suppressed PremiumUpsellControlPanel")
-            target.removeFromSuperview()
         }
     }
 }

@@ -177,6 +177,11 @@ class SponsoredPlaylistHeaderServiceKill: ClassHook<NSObject> {
 
 // Rendering fallback for a sponsored header that was already materialized
 // before its service hook became active. Generic Spotify banners stay intact.
+// Hide in place, never detach: hosts can activate constraints against these
+// views after attach, and a detached view turns that into a
+// "no common ancestor" NSLayoutConstraint exception (the CMP banner crash,
+// confirmed on device 2026-11-26). The same applies to every view kill in
+// this file.
 class SponsoredPlaylistHeaderViewKill: ClassHook<UIView> {
     typealias Group = SponsoredPlaylistHeaderViewGroup
     static let targetName =
@@ -188,7 +193,6 @@ class SponsoredPlaylistHeaderViewKill: ClassHook<UIView> {
         target.isUserInteractionEnabled = false
         if target.superview != nil {
             adlog("AdsSponsoredPlaylistHeaderCentralView")
-            target.removeFromSuperview()
         }
     }
 }
@@ -233,7 +237,6 @@ class EmbeddedAdAdapterElementUIKill: ClassHook<NSObject> {
         view.isUserInteractionEnabled = false
         if view.superview != nil {
             adlog("EmbeddedAdAdapterElementUI (scroll-feed ad card)")
-            view.removeFromSuperview()
         }
     }
 }
@@ -444,7 +447,6 @@ class HtmlAdElementUIKill: ClassHook<NSObject> {
         view.isUserInteractionEnabled = false
         if view.superview != nil {
             adlog("HtmlAdElementUI")
-            view.removeFromSuperview()
         }
     }
 }
@@ -462,7 +464,6 @@ class DSAMainViewKill: ClassHook<NSObject> {
         view.isUserInteractionEnabled = false
         if view.superview != nil {
             adlog("DSAMainView")
-            view.removeFromSuperview()
         }
     }
 }
