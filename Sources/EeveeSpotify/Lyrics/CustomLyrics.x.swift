@@ -42,6 +42,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
 
     var currentTitle: String? = nil
     var currentArtist: String? = nil
+    var currentIsrc: String? = nil
     var hasMetadata = false
     // Which resolution step produced the metadata, and what the player
     // observer last reported as the playing track. Both are recorded in the
@@ -57,6 +58,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     if let captured = capturedTrackMetadata(for: trackId) {
         currentTitle = captured.title
         currentArtist = captured.artist
+        currentIsrc = captured.isrc
         hasMetadata = true
         metadataStep = "captured"
     }
@@ -110,14 +112,19 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         }
     }
 
-    // 4. Spotify Web API fallback using captured Bearer token
+    // 4. Spotify Web API fallback using captured Bearer token. This is
+    // also the only step that can supply the track's ISRC (the response
+    // carries `external_ids.isrc`): the request is keyed by this exact
+    // track ID, so the ISRC is certainly this track's own — the trust
+    // the offline cache's identity keying requires.
     if !hasMetadata, let token = spotifyAccessToken {
         if let info = fetchTrackDetails(trackId: trackId, token: token) {
             currentTitle = info.title
             currentArtist = info.artist
+            currentIsrc = info.isrc
             hasMetadata = true
             metadataStep = "webAPI"
-            storeCapturedTrackMetadata(trackId: trackId, title: currentTitle, artist: currentArtist)
+            storeCapturedTrackMetadata(trackId: trackId, title: currentTitle, artist: currentArtist, isrc: currentIsrc)
         }
     }
 
@@ -129,7 +136,8 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     let searchQuery = LyricsSearchQuery(
         title: currentTitle ?? "",
         primaryArtist: currentArtist ?? "",
-        spotifyTrackId: trackId
+        spotifyTrackId: trackId,
+        isrc: currentIsrc
     )
     
     let options = UserDefaults.lyricsOptions
@@ -231,7 +239,16 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     // The user's timing correction applies to the native lyrics view only.
     // The karaoke overlay compensates on the playback-position side (see
     // KaraokeLyricsView), so the DTO handed to it above stays unshifted.
-    let timingOffsetMs = UserDefaults.lyricsTimingOffsets.effectiveMs(forTrackId: searchQuery.spotifyTrackId)
+    // The correction is shared across duplicate track IDs of one
+    // recording: the ISRC the offline cache has on file for this track
+    // (recorded when its lyrics were filed under that identity) is the
+    // key, falling back to this resolution's own ISRC when present.
+    let timingIdentityIsrc = LyricsOfflineCache.shared.isrc(forTrackId: searchQuery.spotifyTrackId)
+        ?? searchQuery.isrc
+    let timingOffsetMs = UserDefaults.lyricsTimingOffsets.effectiveMs(
+        forTrackId: searchQuery.spotifyTrackId,
+        isrc: timingIdentityIsrc
+    )
 
     if !servedFromOfflineCache {
         // File under the selected (pipeline) source, not `source`: after

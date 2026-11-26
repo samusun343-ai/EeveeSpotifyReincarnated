@@ -6,7 +6,17 @@ struct LyricsDto {
     var romanization: LyricsRomanizationStatus
     var translation: LyricsTranslationDto?
     var providerCredit: String? = nil
-    
+    /// The ISRC of the recording these lyrics actually came from, when
+    /// the producing stage resolved one *and* verified the match
+    /// (currently the lrc.red stage of the combined source: its search
+    /// hit must match the query on normalized title/artist — an
+    /// unverified first-hit fallback never sets this). The offline
+    /// cache files the entry under this identity so duplicate track
+    /// IDs of the same recording share it (LyricsIdentity). It is
+    /// provenance, not display data, and is never adopted from another
+    /// track's metadata.
+    var resolvedIsrc: String? = nil
+
     /// Returns a copy with every line's timestamp shifted by `offsetMs`
     /// (clamped at zero), applying the user's timing correction for the
     /// native lyrics view. The karaoke overlay compensates on the
