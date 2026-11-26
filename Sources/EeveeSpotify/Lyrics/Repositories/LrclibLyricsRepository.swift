@@ -210,14 +210,12 @@ class LrclibLyricsRepository: LyricsRepository {
             semaphore.signal()
         }
 
-        task.resume()
+        try LyricsDownloadHTTP.start(task)
         // Bounded wait (audit P4): 10s is this session's own
         // request/resource timeout, so any response the session would
         // deliver still arrives; only a completion that never fires is
         // cut, and the no-data path below throws as before.
-        if semaphore.wait(timeout: .now() + 10) == .timedOut {
-            task.cancel()
-        }
+        try LyricsDownloadHTTP.wait(semaphore, task: task, accepting: [404], timeout: 10, onTimeout: .cancelAndReturn)
 
         if error != nil, request.url != url {
             // IPv4-direct attempt failed; retry with the original hostname URL.
@@ -241,11 +239,9 @@ class LrclibLyricsRepository: LyricsRepository {
                 fallbackSemaphore.signal()
             }
 
-            fallbackTask.resume()
+            try LyricsDownloadHTTP.start(fallbackTask)
             // Bounded wait (audit P4): same 10s session bound as above.
-            if fallbackSemaphore.wait(timeout: .now() + 10) == .timedOut {
-                fallbackTask.cancel()
-            }
+            try LyricsDownloadHTTP.wait(fallbackSemaphore, task: fallbackTask, accepting: [404], timeout: 10, onTimeout: .cancelAndReturn)
         }
 
         if let error = error {
@@ -354,6 +350,8 @@ class LrclibLyricsRepository: LyricsRepository {
 
                 return song
             } catch {
+                // A failed download request is not a missing song.
+                if LyricsDownloadHTTP.isDownloading, !(error is DecodingError) { throw error }
                 continue
             }
         }

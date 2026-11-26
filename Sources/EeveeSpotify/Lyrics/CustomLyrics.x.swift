@@ -187,6 +187,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         if let karaoke = cached.karaoke {
             KaraokeLyricsStore.shared.set(trackId: searchQuery.spotifyTrackId, lyrics: karaoke)
         }
+        SelectedProviderFailure.shared.record(trackId: searchQuery.spotifyTrackId, error: lyricsState.fallbackError)
 
         writeDebugLog("[Lyrics] \(trackId): offline cache hit, \(lyricsDto.lines.count) lines")
     } else {
@@ -238,6 +239,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
 
     writeDebugLog("[Lyrics] \(trackId): \(source.description), \(lyricsDto.lines.count) lines, synced=\(lyricsDto.timeSynced), metadata=\(metadataStep), reportedId=\(reportedTrackId ?? "nil")")
     publishLineSyncedKaraokeLyrics(lyricsDto, trackId: searchQuery.spotifyTrackId, source: source)
+    savePlaybackLyrics(trackId: searchQuery.spotifyTrackId, dto: lyricsDto, source: source)
 
     // The user's timing correction applies to the native lyrics view only.
     // The karaoke overlay compensates on the playback-position side (see
@@ -275,7 +277,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             .applyingTimingOffset(timingOffsetMs)
             .toSpotifyLyricsData(source: source.description)
     }
-    
+
     return lyrics
 }
 
@@ -604,7 +606,14 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     guard var lyrics = fetchedLyrics else {
         throw LyricsError.noSuchSong
     }
-    
+
+    applyLyricsColors(&lyrics, originalLyrics: originalLyrics)
+    return try lyrics.serializedData()
+}
+
+/// The colors Spotify's lyrics view gets with a provider's lyrics. Shared with the saved
+/// lyrics that answer a request online (OfflineLyricsSupport), so both look the same.
+func applyLyricsColors(_ lyrics: inout Lyrics, originalLyrics: Lyrics?) {
     let lyricsColorsSettings = UserDefaults.lyricsColors
     
     if lyricsColorsSettings.displayOriginalColors, let originalLyrics = originalLyrics {
@@ -631,6 +640,4 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
             $0.activeLineColor = Color.white.uInt32
         }
     }
-    
-    return try lyrics.serializedData()
 }
