@@ -691,16 +691,19 @@ class CreateMenuStateManagerHook: ClassHook<NSObject> {
 
     func setCreateMenuOpenWithIsOpen(_ isOpen: Bool) {
         orig.setCreateMenuOpenWithIsOpen(isOpen)
+        guard #available(iOS 26.0, *) else { return }
         GlassTabBar.noteCreateMenuManager(target)
     }
 
     func addObserverWithObserver(_ observer: AnyObject) {
         orig.addObserverWithObserver(observer)
+        guard #available(iOS 26.0, *) else { return }
         GlassTabBar.noteCreateMenuManager(target)
     }
 
     func setCreateButtonView(_ view: UIView?) {
         orig.setCreateButtonView(view)
+        guard #available(iOS 26.0, *) else { return }
         GlassTabBar.noteCreateMenuManager(target)
     }
 }
