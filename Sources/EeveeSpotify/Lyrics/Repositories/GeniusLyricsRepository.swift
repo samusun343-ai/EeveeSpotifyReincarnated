@@ -49,7 +49,7 @@ class GeniusLyricsRepository: LyricsRepository {
             semaphore.signal()
         }
 
-        task.resume()
+        try LyricsDownloadHTTP.start(task)
         // Bounded wait (audit P4): this session uses the default
         // configuration (60s request timeout), so a completion that
         // never arrives would block the calling worker indefinitely.
@@ -58,10 +58,7 @@ class GeniusLyricsRepository: LyricsRepository {
         // callers' budgets (12s Genius-fallback waiter, 18s delegate
         // budget). A timeout is a transient failure, like a network
         // error — never a "no such song".
-        if semaphore.wait(timeout: .now() + 5) == .timedOut {
-            task.cancel()
-            throw LyricsError.unknownError
-        }
+        try LyricsDownloadHTTP.wait(semaphore, task: task, timeout: 5)
 
         if let error = error {
             throw error

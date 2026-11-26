@@ -120,7 +120,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             semaphore.signal()
         }
 
-        task.resume()
+        try LyricsDownloadHTTP.start(task)
         // Bounded wait (audit P4): the bound is the session's own
         // configured request timeout (lrc.red 10s, LiriQo 30s — LiriQo
         // normally answers in ~6s and its session was deliberately
@@ -128,11 +128,10 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         // arrives; only a completion that never fires is cut, and the
         // no-data path below throws, which the stage logic treats as a
         // transient failure (floor kept, next stage tried, never cached
-        // as a miss).
+        // as a miss). 404 stays a returned status in a download too:
+        // the stage logic reads it as that stage's miss.
         let waitTimeout: TimeInterval = session === liriQoSession ? 30 : 10
-        if semaphore.wait(timeout: .now() + waitTimeout) == .timedOut {
-            task.cancel()
-        }
+        try LyricsDownloadHTTP.wait(semaphore, task: task, accepting: [404], timeout: waitTimeout, onTimeout: .cancelAndReturn)
 
         if let error = error {
             writeDebugLog("[\(logTag)] Request error for \(stringUrl): \(error)")
@@ -549,15 +548,21 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         if !karaokeLines.isEmpty {
-            KaraokeLyricsStore.shared.set(
-                trackId: query.spotifyTrackId,
-                lyrics: KaraokeLyricsDto(
-                    lines: karaokeLines,
-                    songWriters: track.songwriters ?? [],
-                    providerCode: nil,
-                    providerName: "lrc.red"
-                )
+            let karaoke = KaraokeLyricsDto(
+                lines: karaokeLines,
+                songWriters: track.songwriters ?? [],
+                providerCode: nil,
+                providerName: "lrc.red"
             )
+            // A download saves the custom view's lyrics with its text; playback hands them to the view.
+            if LyricsDownloadHTTP.isDownloading {
+                LyricsDownloadHTTP.downloadedKaraoke = karaoke
+            } else {
+                KaraokeLyricsStore.shared.set(
+                    trackId: query.spotifyTrackId,
+                    lyrics: karaoke
+                )
+            }
         }
 
         var dto = LyricsDto(
@@ -795,10 +800,15 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 if song.hasWordSync == true,
                    let lyricsfile = song.lyricsfile,
                    let karaoke = lrclibKaraoke(fromLyricsfile: lyricsfile, timedLines: timedLines) {
-                    KaraokeLyricsStore.shared.set(
-                        trackId: query.spotifyTrackId,
-                        lyrics: karaoke
-                    )
+                    // A download saves the custom view's lyrics with its text; playback hands them to the view.
+                    if LyricsDownloadHTTP.isDownloading {
+                        LyricsDownloadHTTP.downloadedKaraoke = karaoke
+                    } else {
+                        KaraokeLyricsStore.shared.set(
+                            trackId: query.spotifyTrackId,
+                            lyrics: karaoke
+                        )
+                    }
                 }
 
                 return LyricsDto(
@@ -1126,7 +1136,12 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 writeDebugLog("[LiriQo] Session cache hit for \(query.title)/\(query.primaryArtist)")
 
                 if let karaoke {
-                    KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+                    // A download saves the custom view's lyrics with its text; playback hands them to the view.
+                    if LyricsDownloadHTTP.isDownloading {
+                        LyricsDownloadHTTP.downloadedKaraoke = karaoke
+                    } else {
+                        KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+                    }
                 }
 
                 return dto
@@ -1141,7 +1156,12 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             storeLiriQoEntry(.hit(dto: dto, karaoke: karaoke), for: cacheKey)
 
             if let karaoke {
-                KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+                // A download saves the custom view's lyrics with its text; playback hands them to the view.
+                if LyricsDownloadHTTP.isDownloading {
+                    LyricsDownloadHTTP.downloadedKaraoke = karaoke
+                } else {
+                    KaraokeLyricsStore.shared.set(trackId: query.spotifyTrackId, lyrics: karaoke)
+                }
             }
 
             return dto
