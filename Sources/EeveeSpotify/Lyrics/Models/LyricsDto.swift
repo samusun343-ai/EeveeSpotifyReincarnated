@@ -172,6 +172,35 @@ struct LyricsDto {
         )
     }
 
+    /// The seeded selection is only ever read when Spotify's lyrics
+    /// configuration vends the state above as enabled, and that is
+    /// gated on the remote-config flag
+    /// `ios-feature-lyrics.enable_lyrics_multilanguage_npv`: the
+    /// configuration test manager reads it (default false) and vends
+    /// the state only when it — or the fullscreen sibling — is on,
+    /// and the NPV lyrics pipeline likewise only forwards the state
+    /// to its publisher when the same flag (or the entry-point /
+    /// context-menu toggles) reads on. Both evaluations go through
+    /// `ConfigurationProviderImpl.boolValueForId:defaultValue:` via
+    /// objc_msgSend, so supply the value at that evaluation seam
+    /// only, through the RemoteFlags hook, instead of writing it
+    /// into the resolved configuration: the store, its persistence
+    /// and every other consumer of the raw configuration never see
+    /// it. Only the NPV flag is forced — the fullscreen flag feeds
+    /// the fullscreen lyrics card element and the lyrics context
+    /// menu as well, and leaving it off keeps those surfaces exactly
+    /// as shipped while the NPV flag alone opens both gates.
+    ///
+    /// Must be registered before `activateRemoteFlags()` prepares
+    /// the effective override table; Tweak.x.swift calls it next to
+    /// the seed, which runs earlier in the same init.
+    static func forceLyricsCardGateFlag() {
+        RemoteFlags.shared.force(
+            ["ios-feature-lyrics.enable_lyrics_multilanguage_npv": true],
+            by: "LyricsCardGate"
+        )
+    }
+
     /// The native lyrics card is gated on `alternatives`: once the
     /// binder takes its snapshot path (which requires a translation
     /// language selection to exist — see

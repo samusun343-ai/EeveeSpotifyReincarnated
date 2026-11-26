@@ -234,6 +234,7 @@ struct EeveeSpotify: Tweak {
         // after tweak init). No-op when a selection already exists.
         if UserDefaults.lyricsSource.isReplacingLyrics {
             LyricsDto.seedEmptyTranslationLanguageSelectionIfAbsent()
+            LyricsDto.forceLyricsCardGateFlag()
         }
 
         // Must run before Spotify issues its first attributes request, which it
