@@ -44,6 +44,13 @@ enum GlassTabSource: Equatable {
 enum GlassTabBar {
     static let meter = PerfMeter("Glass][TabBar")
     static weak var stock: UIView?
+    // The create menu's state manager, captured by CreateMenuStateManagerHook:
+    // a DI-owned service with no other runtime handle from the tab bar.
+    static weak var createMenuManager: NSObject?
+
+    static func noteCreateMenuManager(_ manager: NSObject) {
+        if createMenuManager !== manager { createMenuManager = manager }
+    }
     private static var barKey: UInt8 = 0
     private static var iconCache: [IconKey: UIImage] = [:]
     private static var liveMisses: [IconKey: Int] = [:]
@@ -288,23 +295,37 @@ enum GlassTabBar {
     // one read. What the getter skips is an index whose factory produces no
     // controller at all: an action item such as the creation button, which has
     // no page. Those gaps compact the array, so an ordinal maps directly only
-    // when there are no gaps (layer 1), or when the gap positions relative to
-    // the active tab pin the target's position down (layer 2, see directTarget).
+    // when there are no gaps (layer 1), when the gap positions are known
+    // exactly (layer 2a), or when the gap positions relative to the active tab
+    // pin the target's position down (layer 2b, see tabTarget).
+    //
+    // Layer 2a knows the gap positions exactly: an action item's item view is
+    // the create menu's own view class, not the tab bar's element view, so the
+    // gap ordinals are read off the views themselves. When the number of
+    // identified action items equals the gap, every page tab's position is
+    // ordinal minus the action items before it — wherever the gaps sit,
+    // including a gap trailing the active tab, which layer 2b cannot reach.
+    // A tap on an identified action item itself selects nothing; it drives
+    // the create menu's state manager instead (see triggerCreateMenu).
     //
     // Layer 3 — when no controller can be identified, navigate Spotify's own
     // link dispatcher to the tab's URI: the official navigation entry that deep
     // links and push notifications land on, which runs the whole
     // materialize-and-present machinery itself. This needs the tab's identity,
     // taken from the item's accessibility identifier (locale-independent);
-    // without one, the tap fails with a log line rather than a guess.
+    // without one, the tap fails with a log line rather than a guess. On the
+    // 9.2.2 device configuration the items carry no such identifier, so this
+    // layer never fired there; it stays as a last resort for configurations
+    // that do carry one, behind the direct layers.
     static func selectStockTab(_ source: UIView, among stockViews: [UIView]) -> Bool {
         guard let ordinal = stockViews.firstIndex(where: { $0 === source }) else { return false }
         let stockCount = stockViews.count
-        // The anchor for layer 2 is only trusted when exactly one stock item
+        // The anchor for layer 2b is only trusted when exactly one stock item
         // reads as active; zero or several matches mean the heuristic state is
         // not reliable enough to arithmetic on.
         let activeViews = stockViews.indices.filter { isActive(stockViews[$0], label: label(in: stockViews[$0])) }
         let activeOrdinal = activeViews.count == 1 ? activeViews[0] : nil
+        let actionOrdinals = Set(stockViews.indices.filter { isActionItem(stockViews[$0]) })
 
         var fallbackCount: Int?
         for start in [source, stock].compactMap({ $0 }) {
@@ -314,10 +335,16 @@ enum GlassTabBar {
                    container.responds(to: NSSelectorFromString("setSelectedViewController:")),
                    let controllers = tabControllers(of: container) {
                     if fallbackCount == nil { fallbackCount = controllers.count }
-                    if let target = directTarget(in: controllers, ordinal: ordinal, stockCount: stockCount,
-                                                 activeOrdinal: activeOrdinal, container: container) {
+                    switch tabTarget(in: controllers, ordinal: ordinal, stockCount: stockCount,
+                                     activeOrdinal: activeOrdinal, actionOrdinals: actionOrdinals,
+                                     container: container) {
+                    case .controller(let target):
                         container.setValue(target, forKey: "selectedViewController")
                         return true
+                    case .actionItem:
+                        return triggerCreateMenu(ordinal: ordinal)
+                    case .unmappable:
+                        break
                     }
                 }
                 responder = current.next
@@ -338,44 +365,144 @@ enum GlassTabBar {
         } else {
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: no tab container for ordinal %d/%d", ordinal, stockCount)
         }
+        logTabDiagnostics(stockViews: stockViews, actionOrdinals: actionOrdinals)
         return false
     }
 
-    // Maps a tapped stock item to the container's view controller for it, or nil
-    // when the position cannot be determined without guessing. See the layer
-    // discussion above selectStockTab.
-    private static func directTarget(in controllers: [UIViewController], ordinal: Int, stockCount: Int,
-                                     activeOrdinal: Int?, container: UIViewController) -> UIViewController? {
+    private enum TabTarget {
+        case controller(UIViewController)
+        case actionItem
+        case unmappable
+    }
+
+    // Maps a tapped stock item to the container's view controller for it, an
+    // action item with no controller at all, or unmappable when the position
+    // cannot be determined without guessing. See the layer discussion above
+    // selectStockTab.
+    private static func tabTarget(in controllers: [UIViewController], ordinal: Int, stockCount: Int,
+                                  activeOrdinal: Int?, actionOrdinals: Set<Int>,
+                                  container: UIViewController) -> TabTarget {
         // No gaps: the array is in tab order and the ordinal is the index.
         if controllers.count == stockCount {
-            return ordinal < controllers.count ? controllers[ordinal] : nil
+            return ordinal < controllers.count ? .controller(controllers[ordinal]) : .unmappable
         }
-        // With gaps, the target's position shifts by the number of gap items
-        // before it. The one measurable quantity is the gaps before the active
-        // tab: its ordinal minus the selected controller's position in the
-        // compacted array. That determines the target's position only when all
-        // gaps are known to sit on one side of the active tab.
         let gap = stockCount - controllers.count
-        guard gap > 0, gap <= 2,
+        guard gap > 0 else { return .unmappable }
+
+        // Layer 2a: the gap positions are known exactly when the identified
+        // action items account for the whole gap. The target's position is
+        // then its ordinal minus the action items before it, wherever the
+        // gaps sit. When the active anchor is measurable it must agree with
+        // the identified mapping; a disagreement means the identification
+        // does not describe this container, and layer 2b decides instead.
+        if actionOrdinals.count == gap {
+            if actionOrdinals.contains(ordinal) { return .actionItem }
+            let pos = ordinal - actionOrdinals.filter { $0 < ordinal }.count
+            if pos >= 0, pos < controllers.count {
+                var identified: TabTarget? = .controller(controllers[pos])
+                if let activeOrdinal, !actionOrdinals.contains(activeOrdinal),
+                   container.responds(to: NSSelectorFromString("selectedViewController")),
+                   let selected = container.value(forKey: "selectedViewController") as? UIViewController,
+                   let selectedPos = controllers.firstIndex(of: selected) {
+                    let activePos = activeOrdinal - actionOrdinals.filter { $0 < activeOrdinal }.count
+                    if activePos != selectedPos { identified = nil }
+                }
+                if let identified {
+                    eeveeLog(
+                        "[EeveeSpotify][Glass] selectStockTab: ordinal %d mapped to position %d via identified action items %@",
+                        ordinal, pos, actionOrdinals.sorted().map { String($0) }.joined(separator: ",")
+                    )
+                    return identified
+                }
+            }
+        }
+
+        // Layer 2b: with gaps in unknown positions, the target's position
+        // shifts by the number of gap items before it. The one measurable
+        // quantity is the gaps before the active tab: its ordinal minus the
+        // selected controller's position in the compacted array. That
+        // determines the target's position only when all gaps are known to
+        // sit on one side of the active tab.
+        guard gap <= 2,
               let activeOrdinal,
               container.responds(to: NSSelectorFromString("selectedViewController")),
               let selected = container.value(forKey: "selectedViewController") as? UIViewController,
-              let selectedPos = controllers.firstIndex(of: selected) else { return nil }
+              let selectedPos = controllers.firstIndex(of: selected) else { return .unmappable }
         let gapsBeforeActive = activeOrdinal - selectedPos
-        guard gapsBeforeActive >= 0, gapsBeforeActive <= gap else { return nil }
-        if ordinal == activeOrdinal { return selected }
+        guard gapsBeforeActive >= 0, gapsBeforeActive <= gap else { return .unmappable }
+        if ordinal == activeOrdinal { return .controller(selected) }
         if ordinal > activeOrdinal, gapsBeforeActive == gap {
             // Every gap is at or before the active tab, so all later tabs
             // shift by the full gap count.
             let pos = ordinal - gap
-            return pos > selectedPos && pos < controllers.count ? controllers[pos] : nil
+            return pos > selectedPos && pos < controllers.count ? .controller(controllers[pos]) : .unmappable
         }
         if ordinal < activeOrdinal, gapsBeforeActive == 0 {
             // No gap at or before the active tab, so earlier tabs are
             // unshifted.
-            return ordinal < selectedPos ? controllers[ordinal] : nil
+            return ordinal < selectedPos ? .controller(controllers[ordinal]) : .unmappable
         }
-        return nil
+        return .unmappable
+    }
+
+    // An item is an action item when its view (or a view inside it) is the
+    // create menu's own item view class. Page tabs use the tab bar's element
+    // view instead; the create item's view is a passive display view whose
+    // open state the menu's state manager drives, with no page behind it.
+    // The class is a property of the view itself, unlike titles (localized)
+    // or accessibility identifiers (absent on the 9.2.2 items).
+    private static func isActionItem(_ view: UIView) -> Bool {
+        view.eeveeFirst(UIView.self) {
+            NSStringFromClass(type(of: $0)).hasSuffix("CreateMenuTabBarItemView")
+        } != nil
+    }
+
+    // Drives the create menu for a tap on the create item. The item has no
+    // page, so there is nothing to select; in the stock bar its tap ends at
+    // the create menu's state manager (CreateMenuStateManagerImpl), whose
+    // setCreateMenuOpen(isOpen:) is the single mutation point for the menu's
+    // open state — it stores the flag and notifies the observers that present
+    // and dismiss the menu UI and mark the item open. Toggling that entry,
+    // as a tap on the item toggles the menu, is the equivalent of the stock
+    // tap. The stock caller reaches it through Swift protocol-witness
+    // dispatch (there are no ObjC call sites), so the instance cannot be
+    // looked up from the bar; CreateMenuStateManagerHook captures it during
+    // feature setup instead.
+    private static func triggerCreateMenu(ordinal: Int) -> Bool {
+        guard let manager = createMenuManager else {
+            eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d is the create item but no create menu state manager captured yet", ordinal)
+            return false
+        }
+        let selector = NSSelectorFromString("setCreateMenuOpenWithIsOpen:")
+        guard manager.responds(to: selector) else {
+            eeveeLog("[EeveeSpotify][Glass] selectStockTab: captured create menu state manager does not respond to setCreateMenuOpenWithIsOpen:")
+            return false
+        }
+        let isOpen = (manager.value(forKey: "isCreateMenuOpen") as? Bool) ?? false
+        typealias SetCreateMenuOpen = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(manager.method(for: selector), to: SetCreateMenuOpen.self)(manager, selector, !isOpen)
+        eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d create item; menu %@ via state manager", ordinal, isOpen ? "closed" : "opened")
+        return true
+    }
+
+    // One line per stock item with the properties the mapping layers consult,
+    // emitted when a tap fails, so a device log settles what the items
+    // actually carry (class, identifiers, title, active/action reads) instead
+    // of another round of guessing from afar.
+    private static func logTabDiagnostics(stockViews: [UIView], actionOrdinals: Set<Int>) {
+        for (index, view) in stockViews.enumerated() {
+            let subID = view.eeveeFirst(UIView.self) { !($0.accessibilityIdentifier ?? "").isEmpty }?.accessibilityIdentifier
+            eeveeLog(
+                "[EeveeSpotify][Glass] tab diag %d: class=%@ a11y=%@ subA11y=%@ title=%@ active=%@ action=%@",
+                index,
+                NSStringFromClass(type(of: view)),
+                view.accessibilityIdentifier ?? "-",
+                subID ?? "-",
+                label(in: view)?.text ?? "-",
+                isActive(view, label: label(in: view)) ? "yes" : "no",
+                actionOrdinals.contains(index) ? "yes" : "no"
+            )
+        }
     }
 
     // The tab's URI, when the stock item carries one of the tab identifiers
@@ -549,6 +676,32 @@ class GlassTabBarContainerHook: ClassHook<UIViewController> {
             guard let stock = GlassTabBar.stock else { return }
             GlassTabBar.meter.measure { GlassTabBar.sync(stock) }
         }
+    }
+}
+
+// Captures the create menu's state manager so a glass tap on the create item
+// can drive the same state entry the stock tap ends at (see
+// GlassTabBar.triggerCreateMenu). The manager is a DI-owned service; its
+// observer registration, button-view assignment and state changes all run
+// during create-feature setup, before a glass tap on the item can happen.
+// The hooks only record the instance and call through unchanged.
+class CreateMenuStateManagerHook: ClassHook<NSObject> {
+    typealias Group = GlassTabBarGroup
+    static let targetName = "_TtC23CreateMenu_PlatformImpl26CreateMenuStateManagerImpl"
+
+    func setCreateMenuOpenWithIsOpen(_ isOpen: Bool) {
+        orig.setCreateMenuOpenWithIsOpen(isOpen)
+        GlassTabBar.noteCreateMenuManager(target)
+    }
+
+    func addObserverWithObserver(_ observer: AnyObject) {
+        orig.addObserverWithObserver(observer)
+        GlassTabBar.noteCreateMenuManager(target)
+    }
+
+    func setCreateButtonView(_ view: UIView?) {
+        orig.setCreateButtonView(view)
+        GlassTabBar.noteCreateMenuManager(target)
     }
 }
 
