@@ -63,35 +63,20 @@ private func forcedPremiumString(forKey key: String) -> String? {
     }
 }
 
+// Product-state consolidation (see product-state-consolidation.md):
+// every key that used to be forced here is now set at the source in
+// modifyAttributes (DynamicPremium+ModifyingFunctions), which rewrites the
+// account-attributes responses the product-state store is built from — so
+// the store itself, and therefore the original getters, already vend the
+// intended values to every reader. This allowlist keeps only the one key
+// the attribute map cannot express: "previous-streaming-rules" is derived
+// state the product-state wrapper tracks in its own ivar (the key string
+// does not exist in the binary's attribute namespace), so there is no
+// source value to rewrite and the getter forcing stays as its only supply.
+// The full forcedPremiumString table is unchanged: it still backs the
+// (currently disabled) dictionary rewrite above.
 private let directGetterCoreAdKeys: Set<String> = [
-    "type",
-    "catalogue",
-    "product",
-    "name",
-    "player-license",
-    "player-license-v2",
-    "financial-product",
-    "ads",
-    "ab-ad-player-targeting",
-    "allow-advertising-id-transmission",
-    "restrict-advertising-id-transmission",
-    "audio-ad-frequency",
-    "video-ad-frequency",
-    "ad-formats",
-    "on-demand",
-    "unrestricted",
-    "shuffle-eligible",
-    "high-bitrate",
-    "streaming-rules",
     "previous-streaming-rules",
-    "shuffle",
-    "shuffle-mode",
-    "pick-and-shuffle",
-    "forced_logout",
-    "forced_logout_abroad_since",
-    "force_logout",
-    "logout_required",
-    "session_invalidated",
 ]
 
 private func forcedDirectGetterString(forKey key: String) -> String? {
