@@ -227,15 +227,17 @@ struct EeveeSpotify: Tweak {
         // Local-only premium force; independent of patching, so premium UI survives everything else being off.
         activateEeveePremiumForce()
 
-        // The native lyrics card's snapshot path only opens when a
-        // translation language selection exists; seed an empty one
-        // before Spotify's lazily created state class reads the key
-        // (first demand comes from the lyrics view pipeline, long
-        // after tweak init). No-op when a selection already exists.
-        if UserDefaults.lyricsSource.isReplacingLyrics {
-            LyricsDto.seedEmptyTranslationLanguageSelectionIfAbsent()
-            LyricsDto.forceLyricsCardGateFlag()
-        }
+        // The translation-language seed and the multilanguage NPV flag
+        // force that used to run here were rolled back on
+        // fix/lyrics-card-npv-card: full static re-tracing from the
+        // NPV scroll card itself (LyricsCardElement, fed by
+        // LyricsScrollDataProvider -> lyrics repository) showed both
+        // targeted the separate fullscreen publisher chain
+        // (bindFn/receive), not this card, whose existence depends
+        // only on the repository vending an entry. The NPV flag force
+        // additionally switched the lyrics view publisher into
+        // multilanguage mode, which destabilised the custom lyrics
+        // view. See lyrics-card-npv-card.md in the work reports.
 
         // Must run before Spotify issues its first attributes request, which it
         // does within a second of launch.

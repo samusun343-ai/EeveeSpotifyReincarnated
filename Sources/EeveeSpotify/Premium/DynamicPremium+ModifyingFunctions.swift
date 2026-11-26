@@ -414,10 +414,11 @@ private let propertyReplacements = [
     // The lyrics translation (multilanguage) gate flags are NOT
     // patched here: writing them into the resolved configuration
     // also switched on the fullscreen lyrics card element and the
-    // lyrics context menu and destabilized the lyrics views. The
-    // one flag the card path needs is supplied at the provider's
-    // evaluation seam instead — see
-    // LyricsDto.forceLyricsCardGateFlag.
+    // lyrics context menu and destabilized the lyrics views. They
+    // are not forced at the provider's evaluation seam either —
+    // the seam force was rolled back on fix/lyrics-card-npv-card
+    // after re-tracing showed the NPV scroll card does not pass
+    // through that gate (see LyricsDto.swift).
     // Also patch without scope in case flag is top-level / un-scoped
     EeveePropertyReplacement(name: "enable_lyrics_share", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_share_enabled", modification: .forceBool(true)),
