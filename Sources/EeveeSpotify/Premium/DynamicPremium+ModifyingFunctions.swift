@@ -676,6 +676,10 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
         $0.stringValue = "premium"
     }
 
+    attributes["product"] = AccountAttribute.with {
+        $0.stringValue = "premium"
+    }
+
     attributes["financial-product"] = AccountAttribute.with {
         $0.stringValue = "pr:premium,tc:0"
     }
@@ -730,6 +734,58 @@ private func modifyAttributes(_ attributes: inout [String: AccountAttribute]) {
 
     attributes["unrestricted"] = AccountAttribute.with {
         $0.boolValue = true
+    }
+
+    // Product-state consolidation (see product-state-consolidation.md):
+    // these keys used to be forced only at the SPTCoreProductState getter
+    // surface (EeveePremiumForce), so consumers reading the product-state
+    // store directly (values() dictionaries, the C++ core) still saw the
+    // server's values while getter consumers saw the forced ones. Setting
+    // them here, at the source the store is built from, gives every reader
+    // the same value; the getter allowlist now only keeps
+    // "previous-streaming-rules", which the attribute map cannot express.
+    // Values are byte-identical to the old getter forcing.
+    attributes["audio-ad-frequency"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    attributes["video-ad-frequency"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    attributes["ad-formats"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+
+    attributes["shuffle"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    attributes["shuffle-mode"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    // Server pushes these to trigger ForcedLogoutDaemon /
+    // AccessTokenRevokerDaemon. Empty at the source neutralizes the push
+    // for every product-state reader, not just the ObjC getters.
+    attributes["forced_logout"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+
+    attributes["forced_logout_abroad_since"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+
+    attributes["force_logout"] = AccountAttribute.with {
+        $0.stringValue = ""
+    }
+
+    attributes["logout_required"] = AccountAttribute.with {
+        $0.stringValue = "0"
+    }
+
+    attributes["session_invalidated"] = AccountAttribute.with {
+        $0.stringValue = "0"
     }
 
     // Premium-vs-free product-state deltas. boolValue serializes as "0"/"1".
