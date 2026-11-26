@@ -43,6 +43,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
     var currentTitle: String? = nil
     var currentArtist: String? = nil
     var currentIsrc: String? = nil
+    var currentDurationSeconds: Int? = nil
     var hasMetadata = false
     // Which resolution step produced the metadata, and what the player
     // observer last reported as the playing track. Both are recorded in the
@@ -122,6 +123,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             currentTitle = info.title
             currentArtist = info.artist
             currentIsrc = info.isrc
+            currentDurationSeconds = info.durationSeconds
             hasMetadata = true
             metadataStep = "webAPI"
             storeCapturedTrackMetadata(trackId: trackId, title: currentTitle, artist: currentArtist, isrc: currentIsrc)
@@ -137,7 +139,8 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
         title: currentTitle ?? "",
         primaryArtist: currentArtist ?? "",
         spotifyTrackId: trackId,
-        isrc: currentIsrc
+        isrc: currentIsrc,
+        durationSeconds: currentDurationSeconds
     )
     
     let options = UserDefaults.lyricsOptions

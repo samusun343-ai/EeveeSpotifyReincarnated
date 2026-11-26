@@ -261,11 +261,24 @@ class LrclibLyricsRepository: LyricsRepository {
         return data
     }
     
-    private func getSong(trackName: String, artistName: String) throws -> LrclibSong {
-        let data: Data = try perform("/get", query: [
+    private func getSong(trackName: String, artistName: String, durationSeconds: Int?) throws -> LrclibSong {
+        // LRCLIB's signature matching treats the duration as crucial:
+        // when one is provided it only serves a record whose duration
+        // matches within ±2 seconds. Send it whenever the query knows
+        // the track's duration (the Web API resolution step supplies
+        // it); without one the endpoint falls back to name matching
+        // alone, and the client-side verification in getRecord is the
+        // only guard.
+        var parameters: [String: Any] = [
             "track_name": trackName,
             "artist_name": artistName
-        ])
+        ]
+
+        if let durationSeconds, durationSeconds > 0 {
+            parameters["duration"] = durationSeconds
+        }
+
+        let data: Data = try perform("/get", query: parameters)
         do {
             return try JSONDecoder().decode(LrclibSong.self, from: data)
         } catch {
@@ -310,16 +323,63 @@ class LrclibLyricsRepository: LyricsRepository {
     /// lrc.red/LRCLIB/LiriQo source, whose LRCLIB stage needs record
     /// fields (the word timings in the Lyricsfile) that the flattened
     /// LyricsDto drops.
+    ///
+    /// Every returned record is verified against the query before it
+    /// may be used (title, artist, duration — see
+    /// LyricsMatchVerification). The stripped-title attempt needs this
+    /// most: LRCLIB answers it with the record for the *stripped* name,
+    /// so for "Our Memories (Instrumental)" it returns the vocal
+    /// version's record, whose name was previously never compared to
+    /// the query at all. A record that fails verification is a miss,
+    /// exactly like a 404.
     func getRecord(_ query: LyricsSearchQuery) throws -> LrclibSong {
-        do {
-            return try getSong(trackName: query.title, artistName: query.primaryArtist)
-        } catch {
+        let attempts = [query.title, query.title.strippedTrackTitle]
+
+        for (index, attemptTitle) in attempts.enumerated() {
+            if index > 0, attemptTitle == attempts[0] {
+                continue
+            }
+
             do {
-                return try getSong(trackName: query.title.strippedTrackTitle, artistName: query.primaryArtist)
+                let song = try getSong(
+                    trackName: attemptTitle,
+                    artistName: query.primaryArtist,
+                    durationSeconds: query.durationSeconds
+                )
+
+                guard recordMatchesQuery(song, query: query) else {
+                    writeDebugLog("[LRCLIB] Record for \(attemptTitle)/\(query.primaryArtist) failed verification (record: \(song.name)/\(song.artistName ?? "?")), treating as a miss")
+                    continue
+                }
+
+                return song
             } catch {
-                throw LyricsError.noSuchSong
+                continue
             }
         }
+
+        throw LyricsError.noSuchSong
+    }
+
+    /// Whether a record LRCLIB returned may be served for the query:
+    /// its name must be the queried title (version descriptors
+    /// included — an instrumental query must not adopt the vocal
+    /// record), its artist the queried artist, and its duration the
+    /// queried duration when both are known.
+    private func recordMatchesQuery(_ song: LrclibSong, query: LyricsSearchQuery) -> Bool {
+        guard let artistName = song.artistName,
+              LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: artistName) else {
+            return false
+        }
+
+        guard LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: song.name) else {
+            return false
+        }
+
+        return LyricsMatchVerification.durationsCompatible(
+            querySeconds: query.durationSeconds,
+            candidateSeconds: song.duration
+        )
     }
 
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {

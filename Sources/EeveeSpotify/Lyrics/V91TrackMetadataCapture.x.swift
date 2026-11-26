@@ -61,15 +61,18 @@ func clearCapturedTrackMetadata(unlessTrackId trackId: String) {
 // which used to be parsed away; it is returned as well because the
 // offline cache's identity keying needs it, and this ID-keyed request
 // is the one resolution whose ISRC is certainly this track's own.
-func fetchTrackDetails(trackId: String, token: String) -> (title: String, artist: String, isrc: String?)? {
+// The track's duration (`duration_ms`) is returned for the same
+// reason and from the same trust: provider signature matching
+// (LRCLIB) and record verification key on it.
+func fetchTrackDetails(trackId: String, token: String) -> (title: String, artist: String, isrc: String?, durationSeconds: Int?)? {
     let urlString = "https://api.spotify.com/v1/tracks/\(trackId)"
     guard let url = URL(string: urlString) else { return nil }
-    
+
     var request = URLRequest(url: url)
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     request.timeoutInterval = 3.0
-    
-    var result: (String, String, String?)?
+
+    var result: (String, String, String?, Int?)?
     let semaphore = DispatchSemaphore(value: 0)
 
     let task = URLSession.shared.dataTask(with: request) { data, response, error in
@@ -84,7 +87,8 @@ func fetchTrackDetails(trackId: String, token: String) -> (title: String, artist
            let firstArtist = artists.first,
            let artistName = firstArtist["name"] as? String {
             let isrc = (json["external_ids"] as? [String: Any])?["isrc"] as? String
-            result = (name, artistName, (isrc?.isEmpty == false) ? isrc : nil)
+            let durationSeconds = (json["duration_ms"] as? NSNumber).map { Int(round($0.doubleValue / 1000)) }
+            result = (name, artistName, (isrc?.isEmpty == false) ? isrc : nil, durationSeconds)
         }
     }
     

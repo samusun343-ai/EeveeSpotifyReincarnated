@@ -99,38 +99,41 @@ class GeniusLyricsRepository: LyricsRepository {
     }
     
     
+    /// The best hit that *verifies* against the query — title and
+    /// artist must both agree (see LyricsMatchVerification) — or nil
+    /// when none does. Search is only candidate retrieval: the pool
+    /// used to degrade title+artist → title-only (substring!) → the
+    /// first hit overall, unverified, so a query nothing matched still
+    /// adopted some song's lyrics (measured: an instrumental "Spring"
+    /// adopted a Vivaldi sonnet entry). A hit that cannot be verified
+    /// is not this song, however the search ranked it.
+    ///
+    /// The one deliberate exception is Genius's own romanization
+    /// account: when romanization is requested, an entry credited to
+    /// "Genius Romanizations" whose title verifies is the romanized
+    /// edition of this song by construction (the search itself was
+    /// scoped to this title and artist), so it is preferred over a
+    /// verified original-language hit.
     private func mostRelevantHitResult(
         hits: [GeniusHit],
-        strippedTitle: String,
-        primaryArtist: String,
+        query: LyricsSearchQuery,
         romanized: Bool,
         hasFoundRomanizedLyrics: inout Bool
-    ) -> GeniusHitResult {
+    ) -> GeniusHitResult? {
         let results = hits.map { $0.result }
 
-        let matchingByTitle = results.filter {
-            $0.title.containsInsensitive(strippedTitle)
-        }
-
-        let strippedArtist = primaryArtist.strippedTrackTitle
-        let matchingByBoth = matchingByTitle.filter {
-            $0.artistNames.containsInsensitive(strippedArtist)
-                || $0.artistNames.containsInsensitive(primaryArtist)
-        }
-
-        // Best match: title+artist → title only → first result
-        let pool = !matchingByBoth.isEmpty ? matchingByBoth
-                 : !matchingByTitle.isEmpty ? matchingByTitle
-                 : results
-
-        if romanized, let romanizedSong = pool.first(
-            where: { $0.artistNames == "Genius Romanizations" }
-        ) {
+        if romanized, let romanizedSong = results.first(where: {
+            $0.artistNames == "Genius Romanizations"
+                && LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: $0.title)
+        }) {
             hasFoundRomanizedLyrics = true
             return romanizedSong
         }
 
-        return pool.first!
+        return results.first { result in
+            LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: result.title)
+                && LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: result.artistNames)
+        }
     }
     
     private func mapLyricsLines(_ rawLines: [String]) -> [String] {
@@ -151,22 +154,38 @@ class GeniusLyricsRepository: LyricsRepository {
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
         let strippedTitle = query.title.strippedTrackTitle
         let hits = try searchSong("\(strippedTitle) \(query.primaryArtist)")
-    
+
         guard !hits.isEmpty else {
             throw LyricsError.noSuchSong
         }
-        
+
         var hasFoundRomanizedLyrics = false
-        
-        let song = mostRelevantHitResult(
+
+        guard let song = mostRelevantHitResult(
             hits: hits,
-            strippedTitle: strippedTitle,
-            primaryArtist: query.primaryArtist,
+            query: query,
             romanized: options.romanization,
             hasFoundRomanizedLyrics: &hasFoundRomanizedLyrics
-        )
-        
+        ) else {
+            throw LyricsError.noSuchSong
+        }
+
         let songInfo = try getSongInfo(song.id)
+
+        // Verify the fetched song itself, not just the search hit that
+        // pointed at it: the lyrics below come from this record. A
+        // romanization entry is exempt from the artist check (its
+        // credit is the romanization account, by design) but not the
+        // title check.
+        if let songTitle = songInfo.title,
+           !LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: songTitle) {
+            throw LyricsError.noSuchSong
+        }
+
+        if !hasFoundRomanizedLyrics, let songArtist = songInfo.artistNames,
+           !LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: songArtist) {
+            throw LyricsError.noSuchSong
+        }
         let plainLines = songInfo.lyrics.plain.components(separatedBy: "\n")
         
         var romanization = LyricsRomanizationStatus.original

@@ -254,8 +254,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     // MARK: - Stage 1: lrc.red
 
     private func getLrcRedLyrics(_ query: LyricsSearchQuery) throws -> LyricsDto {
-        let (isrc, verified) = try searchLrcRed(query: query)
-        let track = try fetchLrcRedTrack(isrc: isrc)
+        let (isrc, track, verified) = try resolveLrcRedTrack(query)
 
         var dto: LyricsDto
 
@@ -269,14 +268,10 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         }
 
         // Propagate the resolved ISRC onto the DTO so the offline cache
-        // can file the entry under the recording's identity — but only
-        // when the search hit was *verified* against the query (a
-        // normalized title/artist or title match). The unverified
-        // first-hit fallback below may be a different song entirely;
-        // adopting its ISRC would file this track's entry under another
-        // recording's identity (the koruru misattribution pattern), so
-        // it deliberately leaves the DTO unmarked and the cache falls
-        // back to fingerprint/track keying for this fetch.
+        // can file the entry under the recording's identity. Resolution
+        // only ever returns verified tracks now (see resolveLrcRedTrack),
+        // so the ISRC is always this recording's own; the flag is kept
+        // to make that contract explicit at the point of adoption.
         if verified {
             dto.resolvedIsrc = isrc
         }
@@ -284,7 +279,33 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return dto
     }
 
-    private func searchLrcRed(query: LyricsSearchQuery) throws -> (isrc: String, verified: Bool) {
+    /// Resolves the query to an lrc.red track whose metadata verifies
+    /// against the query, returning its ISRC and track record.
+    ///
+    /// When the query already knows the track's own ISRC (the Web API
+    /// resolution step supplies it), the catalogue is keyed by ISRC, so
+    /// the track is fetched directly — no text search at all. The
+    /// fetched record is still verified: an ISRC names a recording,
+    /// but the metadata it resolves to must be the queried song before
+    /// its lyrics are served under this track.
+    ///
+    /// Otherwise the text search runs (raw title, then stripped title),
+    /// and only a hit that verifies may be used. The previous
+    /// unverified first-hit fallback is gone: when no hit verified,
+    /// the audit measured it serving a different work's lyrics (an
+    /// instrumental "Spring" received a choir piece's text), so a
+    /// non-verifying hit list is a miss for this stage and the chain
+    /// moves on. The chosen hit's track record is verified once more
+    /// after fetching — it, not the search snippet, is the record
+    /// whose lyrics get served.
+    private func resolveLrcRedTrack(_ query: LyricsSearchQuery) throws -> (isrc: String, track: LrcRedTrackResponse, verified: Bool) {
+        if let queryIsrc = query.isrc, !queryIsrc.isEmpty,
+           let track = try? fetchLrcRedTrack(isrc: queryIsrc),
+           lrcRedTrack(track, matches: query) {
+            writeDebugLog("[lrc.red] Resolved \(query.title)/\(query.primaryArtist) directly by ISRC \(queryIsrc)")
+            return (queryIsrc, track, true)
+        }
+
         var hits = try fetchLrcRedSearchHits(title: query.title, artist: query.primaryArtist)
 
         if hits.isEmpty {
@@ -301,18 +322,27 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             }
         }
 
-        guard !hits.isEmpty else {
+        guard let hit = bestLrcRedHit(hits, query: query),
+              let isrc = hit.isrc, !isrc.isEmpty else {
             throw LyricsError.noSuchSong
         }
 
-        let verifiedHit = bestLrcRedHit(hits, query: query)
-        let hit = verifiedHit ?? hits[0]
+        let track = try fetchLrcRedTrack(isrc: isrc)
 
-        guard let isrc = hit.isrc, !isrc.isEmpty else {
+        guard lrcRedTrack(track, matches: query) else {
+            writeDebugLog("[lrc.red] Track record for \(isrc) failed verification against \(query.title)/\(query.primaryArtist), treating as a miss")
             throw LyricsError.noSuchSong
         }
 
-        return (isrc, verifiedHit != nil)
+        return (isrc, track, true)
+    }
+
+    /// Whether an lrc.red track record is the queried track: title,
+    /// artist and (when both are known) duration must all agree.
+    private func lrcRedTrack(_ track: LrcRedTrackResponse, matches query: LyricsSearchQuery) -> Bool {
+        LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: track.title ?? "")
+            && LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: track.artist ?? "")
+            && LyricsMatchVerification.durationsCompatible(querySeconds: query.durationSeconds, candidateSeconds: track.duration)
     }
 
     private func fetchLrcRedSearchHits(title: String, artist: String) throws -> [LrcRedSearchResponse.Hit] {
@@ -340,20 +370,27 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return response.hits ?? []
     }
 
-    /// Prefers a hit whose normalized title and artist both match the
-    /// query, then a title-only match. Normalization removes "(...)"
-    /// suffixes and "- ..." tails (via strippedTrackTitle), case, and
-    /// punctuation, so remaster/version variants still match.
+    /// The best hit that *verifies* against the query — title, artist
+    /// and (when both are known) duration must all agree (see
+    /// LyricsMatchVerification). A title-only match no longer counts:
+    /// it adopts a same-titled song by a different artist. When the
+    /// query's duration is known, the verified hit closest to it wins;
+    /// otherwise the first verified hit does.
     private func bestLrcRedHit(_ hits: [LrcRedSearchResponse.Hit], query: LyricsSearchQuery) -> LrcRedSearchResponse.Hit? {
-        let wantedTitle = normalizedForMatch(query.title)
-        let wantedArtist = normalizedForMatch(query.primaryArtist)
-
-        return hits.first { hit in
-            normalizedForMatch(hit.title ?? "") == wantedTitle
-                && normalizedForMatch(hit.artist ?? "") == wantedArtist
-        } ?? hits.first { hit in
-            normalizedForMatch(hit.title ?? "") == wantedTitle
+        let verified = hits.filter { hit in
+            LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: hit.title ?? "")
+                && LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: hit.artist ?? "")
+                && LyricsMatchVerification.durationsCompatible(querySeconds: query.durationSeconds, candidateSeconds: hit.duration)
         }
+
+        if let queryDuration = query.durationSeconds {
+            return verified.min { lhs, rhs in
+                abs((lhs.duration ?? .infinity) - Double(queryDuration))
+                    < abs((rhs.duration ?? .infinity) - Double(queryDuration))
+            }
+        }
+
+        return verified.first
     }
 
     private func normalizedForMatch(_ value: String) -> String {
@@ -1168,10 +1205,25 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     }
 
     private func fetchLiriQoLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> (dto: LyricsDto, karaoke: KaraokeLyricsDto?) {
-        let queryString = ([
+        // LiriQo accepts the track's ISRC and duration alongside
+        // title/artist, and resolves far more precisely with them
+        // (measured when the source was adopted: /lyrics?isrc=…
+        // returns the recording itself instead of a text match). Pass
+        // both whenever the query knows them.
+        var parameters: [String: String] = [
             "title": query.title,
             "artist": query.primaryArtist
-        ] as [String: String]).queryString
+        ]
+
+        if let isrc = query.isrc, !isrc.isEmpty {
+            parameters["isrc"] = isrc
+        }
+
+        if let durationSeconds = query.durationSeconds, durationSeconds > 0 {
+            parameters["duration"] = String(durationSeconds)
+        }
+
+        let queryString = parameters.queryString
 
         let (data, statusCode) = try perform(
             "\(Self.liriQoBaseUrl)/lyrics?\(queryString)",
@@ -1227,9 +1279,13 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         // The chosen candidate's ISRC becomes the DTO's identity only
         // on a full normalized title+artist match: a lesser match may
         // be a different recording, and its ISRC must not be adopted
-        // (same rule as the lrc.red stage's verified hits).
+        // (same rule as the lrc.red stage's verified hits). The one
+        // exception is identity by construction: when the candidate's
+        // ISRC is the queried track's own ISRC, it names this
+        // recording regardless of how its title is spelled.
         let resolvedIsrc: String? = {
             guard let isrc = track.isrc, !isrc.isEmpty else { return nil }
+            if let queryIsrc = query.isrc, queryIsrc == isrc { return isrc }
             let fullMatch = normalizedForMatch(track.title ?? "") == normalizedForMatch(query.title)
                 && normalizedForMatch(track.artist ?? "") == normalizedForMatch(query.primaryArtist)
             return fullMatch ? isrc : nil
@@ -1252,11 +1308,23 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             providerCredit = "LiriQo"
         }
 
-        if let timed = track.timed, !timed.isEmpty {
+        // Placeholder text ("暂无歌词" — "no lyrics yet" — and its
+        // kin) is not lyric content: upstreams serve it in the timed
+        // payload of tracks that have no lyrics, and it used to be
+        // returned as a one-line "synced" result. Such lines are
+        // dropped before anything is built; a track whose timed
+        // content is only placeholders falls through to its lrc/plain
+        // forms, and to a miss if those are placeholders too.
+        let usableTimed = (track.timed ?? []).filter { line in
+            guard let text = line.text else { return false }
+            return !LyricsMatchVerification.isPlaceholderLyricLine(text)
+        }
+
+        if !usableTimed.isEmpty {
             // Upstream timing is not trustworthy as-is (zero-filled
             // starts, null ends, out-of-order lines have all been
             // observed), so everything below works on normalized lines.
-            let entries = normalizeTimedLines(timed)
+            let entries = normalizeTimedLines(usableTimed)
 
             guard !entries.isEmpty else {
                 throw LyricsError.noSuchSong
@@ -1364,11 +1432,19 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
         // Tracks that carry only an `lrc` string: parse it into timed
         // lines when it has timestamps, plain lines otherwise.
+        // Placeholder lines are dropped the same way as in the timed
+        // payload above.
         if let lrc = track.lrc, !lrc.isEmpty {
             let parsed = Self.parseLrc(lrc)
+            let timed = parsed.timed.filter {
+                !LyricsMatchVerification.isPlaceholderLyricLine($0.text)
+            }
+            let plain = parsed.plain.filter {
+                !LyricsMatchVerification.isPlaceholderLyricLine($0)
+            }
 
-            if !parsed.timed.isEmpty {
-                let lines = parsed.timed.map {
+            if !timed.isEmpty {
+                let lines = timed.map {
                     LyricsLineDto(content: $0.text.lyricsNoteIfEmpty, offsetMs: $0.startMs)
                 }
 
@@ -1392,11 +1468,11 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 return finish(dto, nil)
             }
 
-            if !parsed.plain.isEmpty {
+            if !plain.isEmpty {
                 return finish(LyricsDto(
-                    lines: parsed.plain.map { LyricsLineDto(content: $0) },
+                    lines: plain.map { LyricsLineDto(content: $0) },
                     timeSynced: false,
-                    romanization: parsed.plain.canBeRomanized ? .canBeRomanized : .original,
+                    romanization: plain.canBeRomanized ? .canBeRomanized : .original,
                     providerCredit: providerCredit
                 ), nil)
             }
@@ -1406,7 +1482,15 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
+        // A plain payload of only placeholder lines is a miss, not a
+        // one-line lyric sheet (measured: Migu answering "暂无歌词"
+        // for an instrumental concerto).
         let texts = plainLyrics.components(separatedBy: "\n")
+            .filter { !LyricsMatchVerification.isPlaceholderLyricLine($0) }
+
+        guard texts.contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) else {
+            throw LyricsError.noSuchSong
+        }
 
         return finish(LyricsDto(
             lines: texts.map { LyricsLineDto(content: $0) },
@@ -1604,26 +1688,36 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
         return romanized
     }
 
-    /// Picks the best usable LiriQo candidate. A normalized title+artist
-    /// match beats a title-only match beats no match; at equal match
-    /// quality, word sync beats line sync beats plain — judged from the
-    /// payload itself (timed lines carrying word timings), not from the
-    /// server's syncLevel label. Candidates are listed primary-first and
-    /// earlier candidates win full ties, so the server's own choice still
-    /// prevails whenever nothing outranks it.
+    /// Picks the best usable LiriQo candidate. A candidate is only in
+    /// the running if it *verifies* against the query (title, artist
+    /// and duration — see LyricsMatchVerification) and carries real
+    /// lyric content: candidates matching nothing used to stay in the
+    /// pool, so when they were the only "usable" ones their content
+    /// was served for a different song (measured with an instrumental
+    /// concerto, whose match-nothing candidate's one timed line was a
+    /// "no lyrics yet" placeholder). Among verified candidates, an
+    /// exact normalized title+artist match beats a looser verified one;
+    /// at equal match quality, word sync beats line sync beats plain —
+    /// judged from the payload itself (timed lines carrying word
+    /// timings), not from the server's syncLevel label. Candidates are
+    /// listed primary-first and earlier candidates win full ties, so
+    /// the server's own choice still prevails whenever nothing
+    /// outranks it.
     private func bestLiriQoTrack(_ candidates: [LiriQoTrack], query: LyricsSearchQuery) -> LiriQoTrack? {
-        let usable = candidates.filter {
-            ($0.timed?.isEmpty == false) || ($0.plain?.isEmpty == false)
-                || ($0.lrc?.isEmpty == false)
+        let verified = candidates.filter { track in
+            hasUsableContent(track)
+                && LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: track.title ?? "")
+                && LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: track.artist ?? "")
+                && LyricsMatchVerification.durationsCompatible(querySeconds: query.durationSeconds, candidateSeconds: track.duration)
         }
 
         let wantedTitle = normalizedForMatch(query.title)
         let wantedArtist = normalizedForMatch(query.primaryArtist)
 
         func rank(of track: LiriQoTrack, index: Int) -> (Int, Int, Int) {
-            let titleMatches = normalizedForMatch(track.title ?? "") == wantedTitle
-            let artistMatches = normalizedForMatch(track.artist ?? "") == wantedArtist
-            let match = titleMatches && artistMatches ? 2 : (titleMatches ? 1 : 0)
+            let exact = normalizedForMatch(track.title ?? "") == wantedTitle
+                && normalizedForMatch(track.artist ?? "") == wantedArtist
+            let match = exact ? 2 : 1
 
             let sync: Int
             if let timed = track.timed, !timed.isEmpty {
@@ -1637,9 +1731,40 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             return (match, sync, -index)
         }
 
-        return usable.enumerated().max { lhs, rhs in
+        return verified.enumerated().max { lhs, rhs in
             rank(of: lhs.element, index: lhs.offset) < rank(of: rhs.element, index: rhs.offset)
         }?.element
+    }
+
+    /// Whether a candidate carries any real lyric content: at least
+    /// one non-placeholder line in its timed, lrc or plain form.
+    /// Placeholder-only payloads ("暂无歌词" and kin) are how several
+    /// upstreams say "no lyrics", and must not make a candidate usable.
+    private func hasUsableContent(_ track: LiriQoTrack) -> Bool {
+        if let timed = track.timed, timed.contains(where: { line in
+            line.text.map { !$0.isEmpty && !LyricsMatchVerification.isPlaceholderLyricLine($0) } ?? false
+        }) {
+            return true
+        }
+
+        if let lrc = track.lrc, !lrc.isEmpty {
+            let parsed = Self.parseLrc(lrc)
+
+            if parsed.timed.contains(where: { !LyricsMatchVerification.isPlaceholderLyricLine($0.text) })
+                || parsed.plain.contains(where: { !LyricsMatchVerification.isPlaceholderLyricLine($0) }) {
+                return true
+            }
+        }
+
+        if let plain = track.plain, !plain.isEmpty,
+           plain.components(separatedBy: "\n").contains(where: {
+               !$0.trimmingCharacters(in: .whitespaces).isEmpty
+                   && !LyricsMatchVerification.isPlaceholderLyricLine($0)
+           }) {
+            return true
+        }
+
+        return false
     }
 
     /// Parses a raw LRC string into timed lines and plain lines. Metadata
@@ -1724,6 +1849,9 @@ private struct LrcRedTrackResponse: Decodable {
     var isrc: String?
     var title: String?
     var artist: String?
+    /// The recording's duration in seconds, decoded so the record can
+    /// be verified against the query (see lrcRedTrack(_:matches:)).
+    var duration: Double?
     var sync: String?
     var lines: Int?
     var songwriters: [String]?
@@ -1884,6 +2012,9 @@ private struct LiriQoTrack: Decodable {
     /// Adopted only on a full normalized title+artist match — see
     /// fetchLiriQoLyrics.
     var isrc: String?
+    /// The recording's duration in seconds, when the payload carries
+    /// one; candidates are verified against the query's duration.
+    var duration: Double?
     var plain: String?
     var timed: [LiriQoTimedLine]?
     /// Some providers (notably Apple Music via LiriQo) ship lyrics only as
