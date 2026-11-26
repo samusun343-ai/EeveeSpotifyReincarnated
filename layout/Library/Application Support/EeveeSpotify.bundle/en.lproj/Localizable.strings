@@ -537,7 +537,6 @@ spicylyrics_template_link = "Spicy ESR template";
 debug_logging = "Debug Logging";
 karaoke_enabled = "Custom lyrics view";
 karaoke_blur_intensity = "Blur intensity";
-karaoke_lock_screen_line = "Current line on Lock Screen (experimental)";
 glass_lyrics_view = "Custom lyrics view";
 lyrics_source_restart_popup = "Restart Spotify so the new lyrics source is used everywhere. Songs you already played keep their old lyrics until then.";
 restart_later = "Later";
