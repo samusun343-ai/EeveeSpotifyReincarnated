@@ -145,6 +145,27 @@ struct LyricsDto {
     // and stays inert for the scroll card (its display conversion
     // discards alternatives).
 
+    /// One-time cleanup of the value the rolled-back seed left on
+    /// device: it stored an empty string under this key, a value
+    /// Spotify itself never writes (a real selection is a language
+    /// code, and deselection is key absence — only the seed could
+    /// produce ""). If the stored value is exactly "", remove the
+    /// key so the device returns to the genuine unselected state.
+    /// Any other value is left untouched; once removed, later
+    /// launches find nothing and this is a no-op.
+    static func removeSeededEmptyTranslationLanguageSelection() {
+        let defaults = UserDefaults.standard
+
+        guard defaults.string(forKey: selectedTranslationLanguageKey) == ""
+        else { return }
+
+        defaults.removeObject(forKey: selectedTranslationLanguageKey)
+        writeDebugLog(
+            "[Lyrics] Removed empty translation language selection "
+                + "left behind by the rolled-back seed"
+        )
+    }
+
     /// The native lyrics card is gated on `alternatives`: once the
     /// binder takes its snapshot path (which requires a translation
     /// language selection to exist), it only

@@ -239,6 +239,10 @@ struct EeveeSpotify: Tweak {
         // multilanguage mode, which destabilised the custom lyrics
         // view. See lyrics-card-npv-card.md in the work reports.
 
+        // One-time cleanup of the value that seed left on device:
+        // removes the key only when it still holds the seed's "".
+        LyricsDto.removeSeededEmptyTranslationLanguageSelection()
+
         // Must run before Spotify issues its first attributes request, which it
         // does within a second of launch.
         activateNebulaAttributes()
