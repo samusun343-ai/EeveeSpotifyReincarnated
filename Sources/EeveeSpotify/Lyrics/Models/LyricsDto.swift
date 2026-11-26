@@ -132,79 +132,22 @@ struct LyricsDto {
     private static let selectedTranslationLanguageKey =
         "com.spotify.lyrics.selectedTranslationLanguage"
 
-    /// Seed an empty-but-present translation language selection.
-    ///
-    /// The native card's binder never evaluates its snapshot at all
-    /// when no translation language is selected: the load request's
-    /// language field is then the nil Optional pair (0, 0), and the
-    /// binder's entry check (second word == 0) routes it straight to
-    /// the event-driven path, whose trigger is outside the response's
-    /// control. So on an unselected device no response content — the
-    /// `alternatives` guarantee below included — can make the card
-    /// appear at bind time.
-    ///
-    /// The state class reads this key exactly once, when it is first
-    /// created, and treats any stored string as an existing selection
-    /// (its own setter likewise only distinguishes nil from non-nil).
-    /// Storing an empty string therefore makes the state read back an
-    /// existing-but-empty selection: the request's language field
-    /// becomes a genuine empty string, the binder takes the snapshot
-    /// path, and its language comparison matches the empty-language
-    /// element `ensureCardGateAlternative` guarantees. A real user
-    /// selection is never overwritten — this only fills the absent
-    /// case, and Spotify's own setter replaces the value as usual if
-    /// the user later picks a language.
-    ///
-    /// Must run before the state class is first created. It is
-    /// demand-created by the lyrics view pipeline, so tweak
-    /// initialization (Tweak.x.swift) is early enough; calling this
-    /// after the state exists would only take effect next launch.
-    static func seedEmptyTranslationLanguageSelectionIfAbsent() {
-        let defaults = UserDefaults.standard
-
-        guard defaults.object(forKey: selectedTranslationLanguageKey) == nil
-        else { return }
-
-        defaults.set("", forKey: selectedTranslationLanguageKey)
-        writeDebugLog(
-            "[Lyrics] Seeded empty translation language selection "
-                + "so the native lyrics card gate sees a selection"
-        )
-    }
-
-    /// The seeded selection is only ever read when Spotify's lyrics
-    /// configuration vends the state above as enabled, and that is
-    /// gated on the remote-config flag
-    /// `ios-feature-lyrics.enable_lyrics_multilanguage_npv`: the
-    /// configuration test manager reads it (default false) and vends
-    /// the state only when it — or the fullscreen sibling — is on,
-    /// and the NPV lyrics pipeline likewise only forwards the state
-    /// to its publisher when the same flag (or the entry-point /
-    /// context-menu toggles) reads on. Both evaluations go through
-    /// `ConfigurationProviderImpl.boolValueForId:defaultValue:` via
-    /// objc_msgSend, so supply the value at that evaluation seam
-    /// only, through the RemoteFlags hook, instead of writing it
-    /// into the resolved configuration: the store, its persistence
-    /// and every other consumer of the raw configuration never see
-    /// it. Only the NPV flag is forced — the fullscreen flag feeds
-    /// the fullscreen lyrics card element and the lyrics context
-    /// menu as well, and leaving it off keeps those surfaces exactly
-    /// as shipped while the NPV flag alone opens both gates.
-    ///
-    /// Must be registered before `activateRemoteFlags()` prepares
-    /// the effective override table; Tweak.x.swift calls it next to
-    /// the seed, which runs earlier in the same init.
-    static func forceLyricsCardGateFlag() {
-        RemoteFlags.shared.force(
-            ["ios-feature-lyrics.enable_lyrics_multilanguage_npv": true],
-            by: "LyricsCardGate"
-        )
-    }
+    // The empty-selection seed and the
+    // `enable_lyrics_multilanguage_npv` RemoteFlags force that used
+    // to live here were rolled back on fix/lyrics-card-npv-card.
+    // Both targeted the fullscreen publisher chain (bindFn/receive):
+    // the NPV scroll card (LyricsCardElement) is vended by
+    // LyricsCardElementServiceImpl from lyrics-repository entries
+    // and never passes through that binder, and the NPV flag force
+    // switched the lyrics view publisher into multilanguage mode,
+    // destabilising the custom lyrics view. The alternatives
+    // guarantee below is kept: it only shapes the substituted DTO
+    // and stays inert for the scroll card (its display conversion
+    // discards alternatives).
 
     /// The native lyrics card is gated on `alternatives`: once the
     /// binder takes its snapshot path (which requires a translation
-    /// language selection to exist — see
-    /// `seedEmptyTranslationLanguageSelectionIfAbsent`), it only
+    /// language selection to exist), it only
     /// forwards the lyrics entry to the card when one element's
     /// `language` equals the selected language. A substituted
     /// response without a matching element is silently dropped by
