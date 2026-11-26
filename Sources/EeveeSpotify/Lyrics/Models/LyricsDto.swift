@@ -119,8 +119,53 @@ struct LyricsDto {
                 }
             ]
         }
-        
+
+        ensureCardGateAlternative(&lyricsData)
+
         return lyricsData
+    }
+
+    /// Spotify's own key for the user's selected lyrics translation
+    /// language (owned by PersistentSelectedTranslationLanguageState,
+    /// which reads it from the standard UserDefaults domain). Absent
+    /// when the user has never picked a translation language.
+    private static let selectedTranslationLanguageKey =
+        "com.spotify.lyrics.selectedTranslationLanguage"
+
+    /// The native lyrics card is gated on `alternatives`: the client
+    /// only forwards the lyrics entry to the card when one element's
+    /// `language` equals the translation language it has on file for
+    /// the request (the persisted selection above, or an empty key
+    /// when nothing is selected). A substituted response without a
+    /// matching element is silently dropped by that check, which is
+    /// why replaced lyrics rendered in Eevee's own views but the
+    /// native card never appeared. Guarantee a matching element:
+    /// the selected language when one is stored, an empty language
+    /// otherwise. The element carries the track's own lines, shaped
+    /// like a genuine translation entry; the gate compares only the
+    /// language, and the display conversion discards alternatives.
+    ///
+    /// When nothing is selected the client's key is a nil Optional
+    /// read as an empty string, so the empty-language element relies
+    /// on that pair comparing equal to "" — the predicate itself has
+    /// no empty checks (verified against the 9.2.2 binary), but the
+    /// nil/"" equivalence is a runtime behaviour that static analysis
+    /// cannot fully prove; it needs one on-device confirmation.
+    private func ensureCardGateAlternative(_ lyricsData: inout LyricsData) {
+        let selectedLanguage = UserDefaults.standard.string(
+            forKey: Self.selectedTranslationLanguageKey
+        ) ?? ""
+
+        guard !lyricsData.alternatives.contains(
+            where: { $0.language == selectedLanguage }
+        ) else { return }
+
+        lyricsData.alternatives.append(
+            LyricsAlternative.with {
+                $0.language = selectedLanguage
+                $0.lines = lyricsData.lines.map { $0.content }
+            }
+        )
     }
 }
 
