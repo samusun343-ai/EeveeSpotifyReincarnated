@@ -132,24 +132,59 @@ struct LyricsDto {
     private static let selectedTranslationLanguageKey =
         "com.spotify.lyrics.selectedTranslationLanguage"
 
-    /// The native lyrics card is gated on `alternatives`: the client
-    /// only forwards the lyrics entry to the card when one element's
-    /// `language` equals the translation language it has on file for
-    /// the request (the persisted selection above, or an empty key
-    /// when nothing is selected). A substituted response without a
-    /// matching element is silently dropped by that check, which is
-    /// why replaced lyrics rendered in Eevee's own views but the
-    /// native card never appeared. Guarantee a matching element.
-    /// The element carries the track's own lines, shaped like a
-    /// genuine translation entry; the gate compares only the
-    /// language, and the display conversion discards alternatives.
+    /// Seed an empty-but-present translation language selection.
     ///
-    /// When nothing is selected the client's key is a nil Optional
-    /// read as an empty string, so the empty-language element relies
-    /// on that pair comparing equal to "" — the predicate itself has
-    /// no empty checks (verified against the 9.2.2 binary), but the
-    /// nil/"" equivalence is a runtime behaviour that static analysis
-    /// cannot fully prove; it needs one on-device confirmation.
+    /// The native card's binder never evaluates its snapshot at all
+    /// when no translation language is selected: the load request's
+    /// language field is then the nil Optional pair (0, 0), and the
+    /// binder's entry check (second word == 0) routes it straight to
+    /// the event-driven path, whose trigger is outside the response's
+    /// control. So on an unselected device no response content — the
+    /// `alternatives` guarantee below included — can make the card
+    /// appear at bind time.
+    ///
+    /// The state class reads this key exactly once, when it is first
+    /// created, and treats any stored string as an existing selection
+    /// (its own setter likewise only distinguishes nil from non-nil).
+    /// Storing an empty string therefore makes the state read back an
+    /// existing-but-empty selection: the request's language field
+    /// becomes a genuine empty string, the binder takes the snapshot
+    /// path, and its language comparison matches the empty-language
+    /// element `ensureCardGateAlternative` guarantees. A real user
+    /// selection is never overwritten — this only fills the absent
+    /// case, and Spotify's own setter replaces the value as usual if
+    /// the user later picks a language.
+    ///
+    /// Must run before the state class is first created. It is
+    /// demand-created by the lyrics view pipeline, so tweak
+    /// initialization (Tweak.x.swift) is early enough; calling this
+    /// after the state exists would only take effect next launch.
+    static func seedEmptyTranslationLanguageSelectionIfAbsent() {
+        let defaults = UserDefaults.standard
+
+        guard defaults.object(forKey: selectedTranslationLanguageKey) == nil
+        else { return }
+
+        defaults.set("", forKey: selectedTranslationLanguageKey)
+        writeDebugLog(
+            "[Lyrics] Seeded empty translation language selection "
+                + "so the native lyrics card gate sees a selection"
+        )
+    }
+
+    /// The native lyrics card is gated on `alternatives`: once the
+    /// binder takes its snapshot path (which requires a translation
+    /// language selection to exist — see
+    /// `seedEmptyTranslationLanguageSelectionIfAbsent`), it only
+    /// forwards the lyrics entry to the card when one element's
+    /// `language` equals the selected language. A substituted
+    /// response without a matching element is silently dropped by
+    /// that check, which is why replaced lyrics rendered in Eevee's
+    /// own views but the native card never appeared. Guarantee a
+    /// matching element. The element carries the track's own lines,
+    /// shaped like a genuine translation entry; the gate compares
+    /// only the language, and the display conversion discards
+    /// alternatives.
     ///
     /// The client's read of the stored selection is itself gated by
     /// a Bool in the state class: on a device where that gate is off,

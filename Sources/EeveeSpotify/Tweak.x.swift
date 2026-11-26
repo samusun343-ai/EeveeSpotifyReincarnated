@@ -227,6 +227,15 @@ struct EeveeSpotify: Tweak {
         // Local-only premium force; independent of patching, so premium UI survives everything else being off.
         activateEeveePremiumForce()
 
+        // The native lyrics card's snapshot path only opens when a
+        // translation language selection exists; seed an empty one
+        // before Spotify's lazily created state class reads the key
+        // (first demand comes from the lyrics view pipeline, long
+        // after tweak init). No-op when a selection already exists.
+        if UserDefaults.lyricsSource.isReplacingLyrics {
+            LyricsDto.seedEmptyTranslationLanguageSelectionIfAbsent()
+        }
+
         // Must run before Spotify issues its first attributes request, which it
         // does within a second of launch.
         activateNebulaAttributes()
