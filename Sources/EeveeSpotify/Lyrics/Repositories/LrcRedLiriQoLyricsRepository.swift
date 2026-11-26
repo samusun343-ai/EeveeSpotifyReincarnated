@@ -254,20 +254,37 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
     // MARK: - Stage 1: lrc.red
 
     private func getLrcRedLyrics(_ query: LyricsSearchQuery) throws -> LyricsDto {
-        let isrc = try searchLrcRed(query: query)
+        let (isrc, verified) = try searchLrcRed(query: query)
         let track = try fetchLrcRedTrack(isrc: isrc)
+
+        var dto: LyricsDto
 
         switch track.sync ?? "" {
         case "word", "line":
-            return try fetchLrcRedSyncedLyrics(isrc: isrc, track: track, query: query)
+            dto = try fetchLrcRedSyncedLyrics(isrc: isrc, track: track, query: query)
         default:
             // "none" (or unknown): the track exists but has no timing.
             // The TTML still carries the text, so serve it as plain lyrics.
-            return try fetchLrcRedPlainLyrics(isrc: isrc, track: track)
+            dto = try fetchLrcRedPlainLyrics(isrc: isrc, track: track)
         }
+
+        // Propagate the resolved ISRC onto the DTO so the offline cache
+        // can file the entry under the recording's identity — but only
+        // when the search hit was *verified* against the query (a
+        // normalized title/artist or title match). The unverified
+        // first-hit fallback below may be a different song entirely;
+        // adopting its ISRC would file this track's entry under another
+        // recording's identity (the koruru misattribution pattern), so
+        // it deliberately leaves the DTO unmarked and the cache falls
+        // back to fingerprint/track keying for this fetch.
+        if verified {
+            dto.resolvedIsrc = isrc
+        }
+
+        return dto
     }
 
-    private func searchLrcRed(query: LyricsSearchQuery) throws -> String {
+    private func searchLrcRed(query: LyricsSearchQuery) throws -> (isrc: String, verified: Bool) {
         var hits = try fetchLrcRedSearchHits(title: query.title, artist: query.primaryArtist)
 
         if hits.isEmpty {
@@ -288,13 +305,14 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
-        let hit = bestLrcRedHit(hits, query: query) ?? hits[0]
+        let verifiedHit = bestLrcRedHit(hits, query: query)
+        let hit = verifiedHit ?? hits[0]
 
         guard let isrc = hit.isrc, !isrc.isEmpty else {
             throw LyricsError.noSuchSong
         }
 
-        return isrc
+        return (isrc, verifiedHit != nil)
     }
 
     private func fetchLrcRedSearchHits(title: String, artist: String) throws -> [LrcRedSearchResponse.Hit] {
@@ -1206,6 +1224,25 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
             throw LyricsError.noSuchSong
         }
 
+        // The chosen candidate's ISRC becomes the DTO's identity only
+        // on a full normalized title+artist match: a lesser match may
+        // be a different recording, and its ISRC must not be adopted
+        // (same rule as the lrc.red stage's verified hits).
+        let resolvedIsrc: String? = {
+            guard let isrc = track.isrc, !isrc.isEmpty else { return nil }
+            let fullMatch = normalizedForMatch(track.title ?? "") == normalizedForMatch(query.title)
+                && normalizedForMatch(track.artist ?? "") == normalizedForMatch(query.primaryArtist)
+            return fullMatch ? isrc : nil
+        }()
+
+        func finish(_ dto: LyricsDto, _ karaoke: KaraokeLyricsDto?) -> (dto: LyricsDto, karaoke: KaraokeLyricsDto?) {
+            var dto = dto
+            if dto.resolvedIsrc == nil {
+                dto.resolvedIsrc = resolvedIsrc
+            }
+            return (dto: dto, karaoke: karaoke)
+        }
+
         let providerCredit: String
         if let upstreamProvider = track.upstreamProvider, !upstreamProvider.isEmpty {
             providerCredit = "LiriQo (\(upstreamProvider))"
@@ -1322,7 +1359,7 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                 karaoke = nil
             }
 
-            return (dto: dto, karaoke: karaoke)
+            return finish(dto, karaoke)
         }
 
         // Tracks that carry only an `lrc` string: parse it into timed
@@ -1352,16 +1389,16 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
                     dto = romanized
                 }
 
-                return (dto: dto, karaoke: nil)
+                return finish(dto, nil)
             }
 
             if !parsed.plain.isEmpty {
-                return (dto: LyricsDto(
+                return finish(LyricsDto(
                     lines: parsed.plain.map { LyricsLineDto(content: $0) },
                     timeSynced: false,
                     romanization: parsed.plain.canBeRomanized ? .canBeRomanized : .original,
                     providerCredit: providerCredit
-                ), karaoke: nil)
+                ), nil)
             }
         }
 
@@ -1371,12 +1408,12 @@ class LrcRedLiriQoLyricsRepository: LyricsRepository {
 
         let texts = plainLyrics.components(separatedBy: "\n")
 
-        return (dto: LyricsDto(
+        return finish(LyricsDto(
             lines: texts.map { LyricsLineDto(content: $0) },
             timeSynced: false,
             romanization: texts.canBeRomanized ? .canBeRomanized : .original,
             providerCredit: providerCredit
-        ), karaoke: nil)
+        ), nil)
     }
 
     /// One LiriQo timed line after normalization, with its TTML line key
@@ -1842,6 +1879,11 @@ private struct LiriQoTrack: Decodable {
     var syncLevel: String?
     var title: String?
     var artist: String?
+    /// The recording's ISRC, when the aggregator's payload carries one
+    /// (not observed in every response; decoded opportunistically).
+    /// Adopted only on a full normalized title+artist match — see
+    /// fetchLiriQoLyrics.
+    var isrc: String?
     var plain: String?
     var timed: [LiriQoTimedLine]?
     /// Some providers (notably Apple Music via LiriQo) ship lyrics only as

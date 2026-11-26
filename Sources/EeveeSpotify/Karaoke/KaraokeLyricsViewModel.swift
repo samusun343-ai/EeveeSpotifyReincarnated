@@ -74,10 +74,19 @@ final class KaraokeLyricsViewModel: ObservableObject {
         }
     }
 
+    /// The ISRC the offline cache has on file for the current track,
+    /// if its lyrics were ever filed under that identity. Timing
+    /// corrections are shared across duplicate track IDs of one
+    /// recording under this key (and only this key — see
+    /// LyricsTimingOffsets).
+    private var identityIsrc: String? {
+        trackId.flatMap { LyricsOfflineCache.shared.isrc(forTrackId: $0) }
+    }
+
     private func refreshTimingOffset() {
         let offsets = UserDefaults.lyricsTimingOffsets
-        timingOffsetMs = offsets.effectiveMs(forTrackId: trackId)
-        trackTimingOffsetMs = offsets.perTrackMs(forTrackId: trackId)
+        timingOffsetMs = offsets.effectiveMs(forTrackId: trackId, isrc: identityIsrc)
+        trackTimingOffsetMs = offsets.perTrackMs(forTrackId: trackId, isrc: identityIsrc)
     }
 
     /// Steps this track's own timing correction by `stepMs` (the overlay's
@@ -87,8 +96,9 @@ final class KaraokeLyricsViewModel: ObservableObject {
         guard let trackId, !trackId.isEmpty else { return }
 
         var offsets = UserDefaults.lyricsTimingOffsets
-        let newValue = min(10_000, max(-10_000, offsets.perTrackMs(forTrackId: trackId) + stepMs))
-        offsets.setPerTrackMs(newValue, forTrackId: trackId)
+        let isrc = identityIsrc
+        let newValue = min(10_000, max(-10_000, offsets.perTrackMs(forTrackId: trackId, isrc: isrc) + stepMs))
+        offsets.setPerTrackMs(newValue, forTrackId: trackId, isrc: isrc)
         UserDefaults.lyricsTimingOffsets = offsets
         refreshTimingOffset()
         writeDebugLog("[Karaoke] timing offset for \(trackId): track \(newValue) ms, effective \(timingOffsetMs) ms")
@@ -100,7 +110,7 @@ final class KaraokeLyricsViewModel: ObservableObject {
         guard let trackId, !trackId.isEmpty else { return }
 
         var offsets = UserDefaults.lyricsTimingOffsets
-        offsets.setPerTrackMs(0, forTrackId: trackId)
+        offsets.setPerTrackMs(0, forTrackId: trackId, isrc: identityIsrc)
         UserDefaults.lyricsTimingOffsets = offsets
         refreshTimingOffset()
     }
