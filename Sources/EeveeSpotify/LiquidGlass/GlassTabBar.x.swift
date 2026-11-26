@@ -486,9 +486,10 @@ enum GlassTabBar {
     // view is a passive display view whose open state the menu's state
     // manager drives, with no page behind it.
     private static func isActionItem(_ view: UIView) -> Bool {
-        if view.eeveeFirst(UIView.self) {
+        let hasCreateItemView = view.eeveeFirst(UIView.self) {
             NSStringFromClass(type(of: $0)).hasSuffix("CreateMenuTabBarItemView")
-        } != nil { return true }
+        } != nil
+        if hasCreateItemView { return true }
         if let button = createButtonView, button === view || button.isDescendant(of: view) { return true }
         if let identity = itemIdentity(view),
            UserDefaults.knownCreateTabIdentities.contains(identity) { return true }
