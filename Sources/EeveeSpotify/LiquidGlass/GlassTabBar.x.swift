@@ -60,6 +60,14 @@ enum GlassTabBar {
         if createButtonView !== view { createButtonView = view }
     }
     private static var createDriveAttempts = 0
+    // The last stock ordinal known to be the container's actual selection,
+    // recorded whenever a selection is resolved exactly (a container
+    // read-back in displayIndex, or a stock selection selectStockTab drove
+    // successfully). The glass bar's display falls back to it when the
+    // container cannot be read back exactly at sync time; the items' active
+    // appearance is not usable as the display source (see displayIndex).
+    private static var lastStockOrdinal: Int?
+    private static var displayLogOrdinal: Int?
     private static var barKey: UInt8 = 0
     private static var iconCache: [IconKey: UIImage] = [:]
     private static var liveMisses: [IconKey: Int] = [:]
@@ -175,8 +183,17 @@ enum GlassTabBar {
             missing = missing || item.image == nil
         }
         let custom = CustomTabs.selectedKey.flatMap { key in sources.firstIndex { if case .custom(let tab) = $0 { return tab.key == key } else { return false } } }
-        let active = custom ?? activeFlags.firstIndex(of: true)
-        if let active, active < items.count, bar.selectedItem !== items[active] { bar.selectedItem = items[active] }
+        let active = custom ?? displayIndex(sources: sources, tabs: tabs, stock: stock, activeFlags: activeFlags)
+        if let active, active < items.count, bar.selectedItem !== items[active] {
+            bar.selectedItem = items[active]
+            if custom == nil, active != activeFlags.firstIndex(of: true), displayLogOrdinal != active {
+                displayLogOrdinal = active
+                eeveeLog(
+                    "[EeveeSpotify][Glass] Tab display follows the actual selection: index %d (appearance index %@)",
+                    active, activeFlags.firstIndex(of: true).map { String($0) } ?? "-"
+                )
+            }
+        }
         if missing && retries < 40 {
             retries += 1
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { sync(stock) }
@@ -189,6 +206,104 @@ enum GlassTabBar {
         let frame = barFrame(in: stock)
         if bar.frame != frame { bar.frame = frame }
         if stock.subviews.last !== bar { stock.bringSubviewToFront(bar) }
+    }
+
+    // Which item the glass bar shows as selected, as an index into sources.
+    // The stock items' active appearance is NOT the source: in the SwiftUI
+    // Element realization it does not track programmatic selection (it stays
+    // on the launch tab after the container's selection has moved — the same
+    // staleness round 5 removed from the tap mapping), so deriving the
+    // display from it snapped the bar's selection back to the launch tab
+    // after every successful tab switch: the page moved, the bar's selected
+    // item did not. The display instead follows the selection itself:
+    // - the create item, while the create menu is open (the menu's state
+    //   manager is what marks the stock item open; the page selection does
+    //   not move while the menu is up);
+    // - the tab container's selected view controller, inverted through the
+    //   identified action items — exact whenever the identified count
+    //   reconciles with the controller count, which is the configuration
+    //   every observed session runs. GlassTabBarContainerHook re-runs sync
+    //   after every selection change through the container's setter, and
+    //   the stock bar's layout hook re-runs it on layout, so this read-back
+    //   tracks selections however they were made (glass taps, deep links,
+    //   Spotify's own programmatic selection);
+    // - the last exactly-known selection (a read-back above, or a stock
+    //   selection selectStockTab drove successfully), for the syncs where
+    //   the container cannot be read back exactly;
+    // - the items' appearance, only before any of the above has ever
+    //   resolved — at cold start the appearance still shows the launch tab,
+    //   which is the actual selection at that point.
+    private static func displayIndex(sources: [GlassTabSource], tabs: [UIView], stock: UIView, activeFlags: [Bool]) -> Int? {
+        let actions = actionOrdinals(in: tabs)
+        func sourcesIndex(ofOrdinal ordinal: Int) -> Int? {
+            guard ordinal >= 0, ordinal < tabs.count else { return nil }
+            let view = tabs[ordinal]
+            return sources.firstIndex { entry in
+                if case .stock(let candidate) = entry { return candidate === view }
+                return false
+            }
+        }
+        if let ordinal = openCreateMenuOrdinal(in: tabs), let index = sourcesIndex(ofOrdinal: ordinal) {
+            return index
+        }
+        if let ordinal = containerSelectedOrdinal(from: stock, stockCount: tabs.count, actionOrdinals: actions) {
+            lastStockOrdinal = ordinal
+            if let index = sourcesIndex(ofOrdinal: ordinal) { return index }
+        }
+        if let ordinal = lastStockOrdinal, let index = sourcesIndex(ofOrdinal: ordinal) {
+            return index
+        }
+        return activeFlags.firstIndex(of: true)
+    }
+
+    // The stock ordinal of the tab container's currently selected view
+    // controller, or nil when it cannot be determined exactly. The walk and
+    // the KVC reads mirror selectStockTab's container lookup. The inversion
+    // (controller position -> stock ordinal) is exact only when the
+    // identified action items account for the whole gap between the stock
+    // count and the controller count; if the counts do not reconcile, the
+    // identified set is incomplete (or over-complete) and an inverted
+    // ordinal could be off by the unidentified gaps, so the read is
+    // distrusted rather than approximated.
+    private static func containerSelectedOrdinal(from stock: UIView, stockCount: Int, actionOrdinals: Set<Int>) -> Int? {
+        var responder: UIResponder? = stock
+        while let current = responder {
+            if let container = current as? UIViewController,
+               container.responds(to: NSSelectorFromString("setSelectedViewController:")),
+               let controllers = tabControllers(of: container),
+               container.responds(to: NSSelectorFromString("selectedViewController")),
+               let selected = container.value(forKey: "selectedViewController") as? UIViewController,
+               let position = controllers.firstIndex(of: selected) {
+                guard stockCount - actionOrdinals.count == controllers.count else { return nil }
+                var rank = -1
+                for ordinal in 0..<stockCount where !actionOrdinals.contains(ordinal) {
+                    rank += 1
+                    if rank == position { return ordinal }
+                }
+                return nil
+            }
+            responder = current.next
+        }
+        return nil
+    }
+
+    // The create item's stock ordinal while the create menu is open, else
+    // nil. The state manager's isCreateMenuOpen is the same state the stock
+    // bar's observers use to mark the item open (see triggerCreateMenu);
+    // the item itself is found by the create-specific signals, independent
+    // of the full action-item identification.
+    private static func openCreateMenuOrdinal(in stockViews: [UIView]) -> Int? {
+        guard let manager = createMenuManager,
+              (manager.value(forKey: "isCreateMenuOpen") as? Bool) == true else { return nil }
+        for (ordinal, view) in stockViews.enumerated() {
+            if let button = createButtonView, button === view || button.isDescendant(of: view) { return ordinal }
+            let hasCreateItemView = view.eeveeFirst(UIView.self) {
+                NSStringFromClass(type(of: $0)).hasSuffix("CreateMenuTabBarItemView")
+            } != nil
+            if hasCreateItemView { return ordinal }
+            if let identity = itemIdentity(view), UserDefaults.knownCreateTabIdentities.contains(identity) { return ordinal }
+        }
+        return nil
     }
 
     // Spotify's own bar stays up until ours has every icon, so launch never shows an empty glass bar.
@@ -358,6 +473,7 @@ enum GlassTabBar {
                                      container: container) {
                     case .controller(let target):
                         container.setValue(target, forKey: "selectedViewController")
+                        lastStockOrdinal = ordinal
                         return true
                     case .actionItem:
                         return triggerCreateMenu(ordinal: ordinal)
@@ -376,6 +492,7 @@ enum GlassTabBar {
         // covers the no-container case.
         if let uri = stockTabURI(for: source), CustomTabs.navigateStockURI(uri) {
             eeveeLog("[EeveeSpotify][Glass] selectStockTab: ordinal %d opened via URI %@", ordinal, uri)
+            lastStockOrdinal = ordinal
             return true
         }
         if let fallbackCount {
@@ -764,6 +881,13 @@ class CreateMenuStateManagerHook: ClassHook<NSObject> {
         orig.setCreateMenuOpenWithIsOpen(isOpen)
         guard #available(iOS 26.0, *) else { return }
         GlassTabBar.noteCreateMenuManager(target)
+        // The glass bar marks the create item selected while the menu is
+        // open and restores the page tab when it closes (see
+        // GlassTabBar.displayIndex), whoever drove the state change.
+        DispatchQueue.main.async {
+            guard let stock = GlassTabBar.stock else { return }
+            GlassTabBar.meter.measure { GlassTabBar.sync(stock) }
+        }
     }
 
     func addObserverWithObserver(_ observer: AnyObject) {
