@@ -63,15 +63,33 @@ class PetitLyricsRepository: LyricsRepository {
     }
     
     
-    private func searchSong(_ title: String, artist: String) throws -> PetitSong {
+    /// Whether a returned Petit song is the queried track. The
+    /// server-side search is comparatively strict (title+artist AND),
+    /// but its answer was adopted with no check at all; a song whose
+    /// title or artist does not verify is a miss, not a result.
+    private func songMatchesQuery(_ song: PetitSong, query: LyricsSearchQuery) -> Bool {
+        guard let artist = song.artist else {
+            return false
+        }
+
+        return LyricsMatchVerification.titlesMatch(queryTitle: query.title, candidateTitle: song.title)
+            && LyricsMatchVerification.artistsMatch(queryArtist: query.primaryArtist, candidateArtist: artist)
+    }
+
+    private func searchSong(_ query: LyricsSearchQuery) throws -> PetitSong {
         let response = try perform(
-            ["key_title": title, "key_artist": artist, "max_count": 1]
+            ["key_title": query.title, "key_artist": query.primaryArtist, "max_count": 1]
         )
-        
+
         guard let song = response.songs.first else {
             throw LyricsError.noSuchSong
         }
-        
+
+        guard songMatchesQuery(song, query: query) else {
+            writeDebugLog("[Petit] Search result \(song.title)/\(song.artist ?? "?") failed verification against \(query.title)/\(query.primaryArtist), treating as a miss")
+            throw LyricsError.noSuchSong
+        }
+
         return song
     }
     
@@ -99,11 +117,19 @@ class PetitLyricsRepository: LyricsRepository {
     
     
     func getLyrics(_ query: LyricsSearchQuery, options: LyricsOptions) throws -> LyricsDto {
-        let searchResult = try searchSong(query.title, artist: query.primaryArtist)
+        let searchResult = try searchSong(query)
         let song = try getSong(
             searchResult.lyricsId,
             availableLyricsType: searchResult.availableLyricsType
         )
+
+        // The fetched record is verified again: its lyrics are what
+        // gets served, so it — not only the search hit that pointed at
+        // it — must be the queried track.
+        guard songMatchesQuery(song, query: query) else {
+            writeDebugLog("[Petit] Fetched song \(song.title)/\(song.artist ?? "?") failed verification against \(query.title)/\(query.primaryArtist), treating as a miss")
+            throw LyricsError.noSuchSong
+        }
         
         guard let lyricsData = Data(base64Encoded: song.lyricsData) else {
             throw LyricsError.decodingError
