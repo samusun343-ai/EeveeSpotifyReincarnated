@@ -411,15 +411,13 @@ private let propertyReplacements = [
     modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_sharing_v2", scope: "ios-feature-lyrics", 
     modification: .forceBool(true)),
-    // Lyrics translation (multilanguage) gates — the persisted
-    // translation-language state is only vended when at least one of
-    // these reads true (both are read with default false through the
-    // remote-config provider). With both off, the state stays the nil
-    // pair and the NPV lyrics card's binder never evaluates its
-    // snapshot, so no lyrics response can produce the card. Force both
-    // on, like the share gates above.
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_fullscreen", scope: "ios-feature-lyrics", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_npv", scope: "ios-feature-lyrics", modification: .forceBool(true)),
+    // The lyrics translation (multilanguage) gate flags are NOT
+    // patched here: writing them into the resolved configuration
+    // also switched on the fullscreen lyrics card element and the
+    // lyrics context menu and destabilized the lyrics views. The
+    // one flag the card path needs is supplied at the provider's
+    // evaluation seam instead — see
+    // LyricsDto.forceLyricsCardGateFlag.
     // Also patch without scope in case flag is top-level / un-scoped
     EeveePropertyReplacement(name: "enable_lyrics_share", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_share_enabled", modification: .forceBool(true)),
@@ -427,9 +425,7 @@ private let propertyReplacements = [
     EeveePropertyReplacement(name: "is_lyrics_share_enabled", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "lyrics_shareable", modification: .forceBool(true)),
     EeveePropertyReplacement(name: "enable_share_link_preview_uploads", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_sharing_v2", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_fullscreen", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_npv", modification: .forceBool(true))
+    EeveePropertyReplacement(name: "enable_sharing_v2", modification: .forceBool(true))
 ]
 
 private func modifyAssignedValues(_ values: inout [AssignedValue]) {
@@ -535,21 +531,7 @@ private let v3PropertyReplacements = [
     // (both assigned true in the snapshots); forceBool also seeds them
     // when a free account's response omits them.
     EeveePropertyReplacement(name: "enable_share_link_preview_uploads", scope: "ios-feature-lyrics", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_sharing_v2", scope: "ios-feature-lyrics", modification: .forceBool(true)),
-
-    // Lyrics translation (multilanguage) gates — both read keys are
-    // constructed in 9.2.2's SPTLyrics_ConfigurationImplProperties.init
-    // and evaluated through ConfigurationProviderImpl.boolValueForId
-    // with default false when Lyrics_ConfigurationImpl's test manager
-    // is built. The persisted translation-language state is vended
-    // only when fullscreen OR npv reads true; with both off the state
-    // stays the nil pair, the NPV lyrics card's binder routes straight
-    // to its event path without evaluating the snapshot, and no lyrics
-    // response (Eevee's included) can produce the card at bind time.
-    // forceBool also seeds them when the account's response omits
-    // them, which is the case this fixes.
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_fullscreen", scope: "ios-feature-lyrics", modification: .forceBool(true)),
-    EeveePropertyReplacement(name: "enable_lyrics_multilanguage_npv", scope: "ios-feature-lyrics", modification: .forceBool(true))
+    EeveePropertyReplacement(name: "enable_sharing_v2", scope: "ios-feature-lyrics", modification: .forceBool(true))
 ]
 
 /// Rewrites 9.2's remote configuration (remote-config-resolver/v3/configuration),
