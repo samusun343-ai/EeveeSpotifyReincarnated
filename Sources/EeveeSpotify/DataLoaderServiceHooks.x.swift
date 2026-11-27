@@ -41,12 +41,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        // Diagnosis markers (§5): every lyrics completion on this layer is
-        // visible, including ones the guards below pass through untouched.
-        if url.isLyricsRequest {
-            writeDebugLog("[LyricsMark] complete hook=DL path=\(url.path) error=\(error == nil ? "nil" : "set") shouldModify=\(SpotifyResponsePatcher.shouldModify(url))")
-        }
-
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.flush(task, url: url)
         }
@@ -117,8 +111,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
                 _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
                 let lyricsPayload = customLyricsData ?? buffer
-                writeDebugLog("[LyricsMark] deliver hook=DL path=\(url.path) branch=v3 source=\(customLyricsData == nil ? "original" : "substituted") bytes=\(lyricsPayload.count)")
-                logLyricsDeliveredShape(lyricsPayload, context: url.path)
                 DispatchQueue.main.async { [self] in
                     orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                     orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -147,8 +139,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
                 _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
                 let lyricsPayload = customLyricsData ?? buffer
-                writeDebugLog("[LyricsMark] deliver hook=DL path=\(url.path) branch=v2 source=\(customLyricsData == nil ? "original" : "substituted") bytes=\(lyricsPayload.count)")
-                logLyricsDeliveredShape(lyricsPayload, context: url.path)
                 DispatchQueue.main.async { [self] in
                     orig.URLSession(session, dataTask: task, didReceiveData: lyricsPayload)
                     orig.URLSession(session, task: task, didCompleteWithError: nil)
@@ -190,14 +180,6 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        // Diagnosis marker (§5): every lyrics response on this layer is
-        // logged BEFORE the guards, so the request path itself (v2 vs v3 —
-        // i.e. the loader predicate's on-device value) is visible in
-        // normal-use logs.
-        if let url = task.currentRequest?.url, url.isLyricsRequest {
-            writeDebugLog("[LyricsMark] resp hook=DL path=\(url.path) status=\(response.statusCode)")
-        }
-
         // Fetching on this delegate queue deadlocks; the held completion handler keeps the task waiting.
         guard let url = task.currentRequest?.url, url.isLyricsRequest, response.statusCode != 200 else {
             orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
@@ -214,14 +196,11 @@ class SPTDataLoaderServiceHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
             guard let lyricsData = data,
                   let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
-                writeDebugLog("[LyricsMark] resp-fallback hook=DL path=\(url.path) eeveeData=nil status=\(response.statusCode)")
                 handler(.allow)
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: { _ in })
                 return
             }
 
-            writeDebugLog("[LyricsMark] resp-deliver hook=DL path=\(url.path) branch=\(url.isLyricsV3 ? "v3" : "v2") bytes=\(lyricsData.count) synthetic=200")
-            logLyricsDeliveredShape(lyricsData, context: url.path)
             DispatchQueue.main.async { [self] in
                 orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
                 orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)

@@ -134,31 +134,3 @@ func logLyricsResponseShape(_ buffer: Data, context: String) {
     }
     writeDebugLog("[LyricsShape] \(context): \(summarizeFields(fields, depth: 0))")
 }
-
-// MARK: - Delivered lyrics payload shape dump (diagnosis markers, §5)
-//
-// [LyricsShape] above dumps the ORIGINAL response buffer, before any
-// substitution — it cannot show what Spotify actually received. This
-// companion dumps the payload a hook is about to DELIVER (substituted or
-// original), under the [LyricsShapeSub] prefix, deduped separately so an
-// original and a delivered dump for the same path can both appear.
-
-private var deliveredShapeDumpedPaths = Set<String>()
-
-func logLyricsDeliveredShape(_ buffer: Data, context: String) {
-    guard !buffer.isEmpty else { return }
-
-    shapeDumpLock.lock()
-    let key = "sub:" + context
-    let already = deliveredShapeDumpedPaths.contains(key)
-    if !already { deliveredShapeDumpedPaths.insert(key) }
-    shapeDumpLock.unlock()
-    guard !already else { return }
-
-    let bytes = [UInt8](buffer)
-    guard let fields = parseProtoFields(bytes) else {
-        writeDebugLog("[LyricsShapeSub] \(context): unparsable (\(bytes.count) bytes)")
-        return
-    }
-    writeDebugLog("[LyricsShapeSub] \(context): \(summarizeFields(fields, depth: 0))")
-}

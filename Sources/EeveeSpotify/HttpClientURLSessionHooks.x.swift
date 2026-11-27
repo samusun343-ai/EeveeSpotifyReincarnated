@@ -20,12 +20,6 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        // Diagnosis markers (§5): every lyrics completion on this layer is
-        // visible, including ones the guards below pass through untouched.
-        if url.isLyricsRequest {
-            writeDebugLog("[LyricsMark] complete hook=HCUS path=\(url.path) error=\(error == nil ? "nil" : "set") shouldModify=\(SpotifyResponsePatcher.shouldModify(url))")
-        }
-
         if CasitaResponseProbe.shouldProbe(url) {
             CasitaResponseProbe.flush(task, url: url)
         }
@@ -96,10 +90,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     semaphore.signal()
                 }
                 _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                let v3Payload = customLyricsData ?? buffer
-                writeDebugLog("[LyricsMark] deliver hook=HCUS path=\(url.path) branch=v3 source=\(customLyricsData == nil ? "original" : "substituted") bytes=\(v3Payload.count)")
-                logLyricsDeliveredShape(v3Payload, context: url.path)
-                orig.URLSession(session, dataTask: task, didReceiveData: v3Payload)
+                orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
@@ -119,10 +110,7 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                     semaphore.signal()
                 }
                 _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                let v2Payload = customLyricsData ?? buffer
-                writeDebugLog("[LyricsMark] deliver hook=HCUS path=\(url.path) branch=v2 source=\(customLyricsData == nil ? "original" : "substituted") bytes=\(v2Payload.count)")
-                logLyricsDeliveredShape(v2Payload, context: url.path)
-                orig.URLSession(session, dataTask: task, didReceiveData: v2Payload)
+                orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
                 orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
@@ -168,16 +156,6 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
             return
         }
 
-        // Diagnosis marker (§5): every lyrics response on this layer is
-        // logged BEFORE the guards, so the request path itself (v2 vs v3 —
-        // i.e. the loader predicate's on-device value) is visible in
-        // normal-use logs. This is the transport the lyrics loader's
-        // DataKit fetch actually traverses (DataLoaderHttpClientImpl ->
-        // HttpClient -> this session).
-        if let url = task.currentRequest?.url, url.isLyricsRequest {
-            writeDebugLog("[LyricsMark] resp hook=HCUS path=\(url.path) status=\(response.statusCode)")
-        }
-
         guard let url = task.currentRequest?.url, url.isLyricsRequest, response.statusCode != 200 else {
             orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: handler)
             return
@@ -196,14 +174,11 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
 
             guard let lyricsData = data,
                   let ok = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "2.0", headerFields: [:]) else {
-                writeDebugLog("[LyricsMark] resp-fallback hook=HCUS path=\(url.path) eeveeData=nil status=\(response.statusCode)")
                 handler(.allow)
                 orig.URLSession(session, dataTask: task, didReceiveResponse: response, completionHandler: { _ in })
                 return
             }
 
-            writeDebugLog("[LyricsMark] resp-deliver hook=HCUS path=\(url.path) branch=\(url.isLyricsV3 ? "v3" : "v2") bytes=\(lyricsData.count) synthetic=200")
-            logLyricsDeliveredShape(lyricsData, context: url.path)
             orig.URLSession(session, dataTask: task, didReceiveResponse: ok, completionHandler: handler)
             orig.URLSession(session, dataTask: task, didReceiveData: lyricsData)
             orig.URLSession(session, task: task, didCompleteWithError: nil)
