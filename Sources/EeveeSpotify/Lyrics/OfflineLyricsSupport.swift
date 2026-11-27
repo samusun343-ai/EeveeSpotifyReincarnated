@@ -393,6 +393,23 @@ func savedLyrics(forFailed url: URL, error: Error?) -> Data? {
 /// for the same task: one provider answer per task is shared between them.
 func eeveeLyricsData(_ path: String, originalLyrics: Lyrics? = nil, task: URLSessionTask) throws -> Data {
     guard path.contains("/download/track/") else {
+        // The sharing the comment above promises, applied to playback too
+        // (the download branch below already wraps itself): the first of
+        // the response/completion callbacks to ask runs the provider
+        // chain, and the other reuses its result instead of running the
+        // whole chain a second time for the same task.
+        return try LyricsTaskState.forTask(task).result {
+            try eeveeLyricsDataUnshared(path, originalLyrics: originalLyrics, task: task)
+        }
+    }
+    return try eeveeLyricsDataUnshared(path, originalLyrics: originalLyrics, task: task)
+}
+
+/// eeveeLyricsData without the per-task sharing. Callers go through the
+/// entry point above; the download branch wraps its own work in
+/// LyricsTaskState, the playback branch is wrapped by the entry point.
+private func eeveeLyricsDataUnshared(_ path: String, originalLyrics: Lyrics? = nil, task: URLSessionTask) throws -> Data {
+    guard path.contains("/download/track/") else {
         guard let trackId = extractTrackId(from: path) else {
             return try getLyricsDataForCurrentTrack(path, originalLyrics: originalLyrics)
         }

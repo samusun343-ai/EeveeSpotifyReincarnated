@@ -191,10 +191,12 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
 
         writeDebugLog("[Lyrics] \(trackId): offline cache hit, \(lyricsDto.lines.count) lines")
     } else {
-        // A fresh fetch starts from nothing, so the custom lyrics button only shows
-        // for lyrics this fetch actually produced.
-        KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
-    
+        // A fresh fetch keeps any existing entry for this track until its
+        // outcome is known. Removing it up front made the custom lyrics
+        // button vanish for the whole fetch (seconds) and reappear on
+        // completion — and flicker when fetches overlapped. The entry is
+        // removed on the paths below where this fetch produces nothing,
+        // so the button still only shows for lyrics a fetch produced.
         do {
             lyricsDto = try repository.getLyrics(searchQuery, options: options)
         }
@@ -213,7 +215,14 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
                 && !(currentArtist ?? "").isEmpty
             if canFallbackToGenius {
                 source = .genius
-                lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+                do {
+                    lyricsDto = try geniusLyricsRepository.getLyrics(searchQuery, options: options)
+                } catch {
+                    // Neither source produced lyrics: the entry preserved
+                    // during the fetch goes now (see the branch's note).
+                    KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+                    throw error
+                }
 
                 // Pin the producing source onto the DTO itself: the
                 // offline cache files this result under the selected
@@ -225,11 +234,21 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
                     lyricsDto.providerCredit = LyricsSource.genius.description
                 }
             } else {
+                // This fetch produced nothing: the entry preserved during
+                // the fetch goes now (see the branch's note).
+                KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
                 throw error
             }
         }
 
         repositoryKaraoke = KaraokeLyricsStore.shared.lyrics(forTrackId: searchQuery.spotifyTrackId)
+        if repositoryKaraoke == nil {
+            // The fetch published no karaoke of its own, so an entry still
+            // in the store is the one preserved from before it. Drop it so
+            // publishLineSyncedKaraokeLyrics installs this fetch's karaoke
+            // below instead of leaving the previous one in place.
+            KaraokeLyricsStore.shared.remove(trackId: searchQuery.spotifyTrackId)
+        }
     }
     
     updateLyricsState {
@@ -554,7 +573,17 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     // served on its next request for the track. Only THIS caller stops
     // waiting; a slow fetch isn't wasted, it's just no longer something
     // Spotify's own thread sits through.
-    let fallbackTimeout: TimeInterval = 12.0
+    //
+    // The bound is 18s. Callers of this function no longer wait on
+    // Spotify's delegate queue (the hooks deliver asynchronously and
+    // share one fetch per task), so the bound only decides whether THIS
+    // request gets the answer or the finished result lands on the next
+    // one. The chain's slowest stage (LiriQo) is allowed 30s by its own
+    // session and typically answers in ~6s after two fast misses, so a
+    // 12s bound cut off chains that were about to succeed; 18s matches
+    // the outer envelope the hooks previously allowed themselves. Past
+    // it, the late-result handoff above still applies unchanged.
+    let fallbackTimeout: TimeInterval = 18.0
     let semaphore = DispatchSemaphore(value: 0)
     var fetchedLyrics: Lyrics?
     var fetchedError: Error?

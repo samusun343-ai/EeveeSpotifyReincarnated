@@ -83,15 +83,15 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 // V3 responses are LyricsWrapperResponse protobuf, not the V1
                 // ColorLyricsResponse the branch below parses: supply the same
                 // lyrics re-encoded as a wrapper, original body as fallback.
-                let semaphore = DispatchSemaphore(value: 0)
-                var customLyricsData: Data?
-                DispatchQueue.global(qos: .userInitiated).async {
-                    customLyricsData = try? eeveeLyricsWrapperData(url.path, task: task)
-                    semaphore.signal()
+                // The fetch runs off this delegate queue and delivers when it
+                // finishes (the download path's shape): semaphore-waiting here
+                // would stall every other response on the session's queue
+                // behind a provider chain that can take seconds.
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let customLyricsData = try? eeveeLyricsWrapperData(url.path, task: task)
+                    orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
+                    orig.URLSession(session, task: task, didCompleteWithError: nil)
                 }
-                _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
-                orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
 
@@ -103,15 +103,15 @@ class HttpClientURLSessionHook: ClassHook<NSObject>, SpotifySessionDelegate {
                 let originalLyrics = try? Lyrics(serializedBytes: buffer)
                 logLyricsResponseShape(buffer, context: url.path)
 
-                let semaphore = DispatchSemaphore(value: 0)
-                var customLyricsData: Data?
-                DispatchQueue.global(qos: .userInitiated).async {
-                    customLyricsData = try? eeveeLyricsData(url.path, originalLyrics: originalLyrics, task: task)
-                    semaphore.signal()
+                // The download path's async shape, for the same reason: the
+                // fetch can take seconds, and semaphore-waiting here would
+                // stall every other response on this session's delegate
+                // queue behind it. Delivery happens when the fetch finishes.
+                DispatchQueue.global(qos: .userInitiated).async { [self] in
+                    let customLyricsData = try? eeveeLyricsData(url.path, originalLyrics: originalLyrics, task: task)
+                    orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
+                    orig.URLSession(session, task: task, didCompleteWithError: nil)
                 }
-                _ = semaphore.wait(timeout: .now() + .milliseconds(18000))
-                orig.URLSession(session, dataTask: task, didReceiveData: customLyricsData ?? buffer)
-                orig.URLSession(session, task: task, didCompleteWithError: nil)
                 return
             }
 
